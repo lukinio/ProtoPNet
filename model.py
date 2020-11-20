@@ -6,27 +6,31 @@ import torch.nn.functional as F
 from resnet_features import resnet18_features, resnet34_features, resnet50_features, resnet101_features, resnet152_features
 from densenet_features import densenet121_features, densenet161_features, densenet169_features, densenet201_features
 from vgg_features import vgg11_features, vgg11_bn_features, vgg13_features, vgg13_bn_features, vgg16_features, vgg16_bn_features,\
-                         vgg19_features, vgg19_bn_features
+    vgg19_features, vgg19_bn_features
+from small_resnet_features import small_resnet18_features
 
 from receptive_field import compute_proto_layer_rf_info_v2
 
-base_architecture_to_features = {'resnet18': resnet18_features,
-                                 'resnet34': resnet34_features,
-                                 'resnet50': resnet50_features,
-                                 'resnet101': resnet101_features,
-                                 'resnet152': resnet152_features,
-                                 'densenet121': densenet121_features,
-                                 'densenet161': densenet161_features,
-                                 'densenet169': densenet169_features,
-                                 'densenet201': densenet201_features,
-                                 'vgg11': vgg11_features,
-                                 'vgg11_bn': vgg11_bn_features,
-                                 'vgg13': vgg13_features,
-                                 'vgg13_bn': vgg13_bn_features,
-                                 'vgg16': vgg16_features,
-                                 'vgg16_bn': vgg16_bn_features,
-                                 'vgg19': vgg19_features,
-                                 'vgg19_bn': vgg19_bn_features}
+base_architecture_to_features = {
+    'resnet18_small': small_resnet18_features,
+    'resnet18': resnet18_features,
+    'resnet34': resnet34_features,
+    'resnet50': resnet50_features,
+    'resnet101': resnet101_features,
+    'resnet152': resnet152_features,
+    'densenet121': densenet121_features,
+    'densenet161': densenet161_features,
+    'densenet169': densenet169_features,
+    'densenet201': densenet201_features,
+    'vgg11': vgg11_features,
+    'vgg11_bn': vgg11_bn_features,
+    'vgg13': vgg13_features,
+    'vgg13_bn': vgg13_bn_features,
+    'vgg16': vgg16_features,
+    'vgg16_bn': vgg16_bn_features,
+    'vgg19': vgg19_features,
+    'vgg19_bn': vgg19_bn_features}
+
 
 class PPNet(nn.Module):
 
@@ -41,7 +45,7 @@ class PPNet(nn.Module):
         self.num_prototypes = prototype_shape[0]
         self.num_classes = num_classes
         self.epsilon = 1e-4
-        
+
         # prototype_activation_function could be 'log', 'linear',
         # or a generic function that converts distance to similarity score
         self.prototype_activation_function = prototype_activation_function
@@ -68,10 +72,12 @@ class PPNet(nn.Module):
         features_name = str(self.features).upper()
         if features_name.startswith('VGG') or features_name.startswith('RES'):
             first_add_on_layer_in_channels = \
-                [i for i in features.modules() if isinstance(i, nn.Conv2d)][-1].out_channels
+                [i for i in features.modules() if isinstance(
+                    i, nn.Conv2d)][-1].out_channels
         elif features_name.startswith('DENSE'):
             first_add_on_layer_in_channels = \
-                [i for i in features.modules() if isinstance(i, nn.BatchNorm2d)][-1].num_features
+                [i for i in features.modules() if isinstance(
+                    i, nn.BatchNorm2d)][-1].num_features
         else:
             raise Exception('other base base_architecture NOT implemented')
 
@@ -79,7 +85,8 @@ class PPNet(nn.Module):
             add_on_layers = []
             current_in_channels = first_add_on_layer_in_channels
             while (current_in_channels > self.prototype_shape[1]) or (len(add_on_layers) == 0):
-                current_out_channels = max(self.prototype_shape[1], (current_in_channels // 2))
+                current_out_channels = max(
+                    self.prototype_shape[1], (current_in_channels // 2))
                 add_on_layers.append(nn.Conv2d(in_channels=current_in_channels,
                                                out_channels=current_out_channels,
                                                kernel_size=1))
@@ -96,12 +103,14 @@ class PPNet(nn.Module):
             self.add_on_layers = nn.Sequential(*add_on_layers)
         else:
             self.add_on_layers = nn.Sequential(
-                nn.Conv2d(in_channels=first_add_on_layer_in_channels, out_channels=self.prototype_shape[1], kernel_size=1),
+                nn.Conv2d(in_channels=first_add_on_layer_in_channels,
+                          out_channels=self.prototype_shape[1], kernel_size=1),
                 nn.ReLU(),
-                nn.Conv2d(in_channels=self.prototype_shape[1], out_channels=self.prototype_shape[1], kernel_size=1),
+                nn.Conv2d(
+                    in_channels=self.prototype_shape[1], out_channels=self.prototype_shape[1], kernel_size=1),
                 nn.Sigmoid()
-                )
-        
+            )
+
         self.prototype_vectors = nn.Parameter(torch.rand(self.prototype_shape),
                                               requires_grad=True)
 
@@ -111,7 +120,7 @@ class PPNet(nn.Module):
                                  requires_grad=False)
 
         self.last_layer = nn.Linear(self.num_prototypes, self.num_classes,
-                                    bias=False) # do not use bias
+                                    bias=False)  # do not use bias
 
         if init_weights:
             self._initialize_weights()
@@ -213,7 +222,8 @@ class PPNet(nn.Module):
         [0, current number of prototypes - 1] that indicates the prototypes to
         be removed
         '''
-        prototypes_to_keep = list(set(range(self.num_prototypes)) - set(prototypes_to_prune))
+        prototypes_to_keep = list(
+            set(range(self.num_prototypes)) - set(prototypes_to_prune))
 
         self.prototype_vectors = nn.Parameter(self.prototype_vectors.data[prototypes_to_keep, ...],
                                               requires_grad=True)
@@ -225,7 +235,8 @@ class PPNet(nn.Module):
         # changing in_features and out_features make sure the numbers are consistent
         self.last_layer.in_features = self.num_prototypes
         self.last_layer.out_features = self.num_classes
-        self.last_layer.weight.data = self.last_layer.weight.data[:, prototypes_to_keep]
+        self.last_layer.weight.data = self.last_layer.weight.data[:,
+                                                                  prototypes_to_keep]
 
         # self.ones is nn.Parameter
         self.ones = nn.Parameter(self.ones.data[prototypes_to_keep, ...],
@@ -272,7 +283,8 @@ class PPNet(nn.Module):
         for m in self.add_on_layers.modules():
             if isinstance(m, nn.Conv2d):
                 # every init technique has an underscore _ in the name
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu')
 
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
@@ -282,7 +294,6 @@ class PPNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
         self.set_last_layer_incorrect_connection(incorrect_strength=-0.5)
-
 
 
 def construct_PPNet(base_architecture, pretrained=True, img_size=224,
@@ -304,4 +315,3 @@ def construct_PPNet(base_architecture, pretrained=True, img_size=224,
                  init_weights=True,
                  prototype_activation_function=prototype_activation_function,
                  add_on_layers_type=add_on_layers_type)
-

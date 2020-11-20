@@ -6,6 +6,7 @@ import torch.utils.data
 # import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+from torchvision.datasets import MNIST, CIFAR10
 
 import argparse
 import re
@@ -30,6 +31,8 @@ from settings import base_architecture, img_size, prototype_shape, num_classes, 
                      prototype_activation_function, add_on_layers_type, experiment_run
 
 base_architecture_type = re.match('^[a-z]*', base_architecture).group(0)
+if "small" in base_architecture:
+    base_architecture_type = "small_" + base_architecture_type
 
 model_dir = './saved_models/' + base_architecture + '/' + experiment_run + '/'
 makedir(model_dir)
@@ -51,41 +54,34 @@ proto_bound_boxes_filename_prefix = 'bb'
 from settings import train_dir, test_dir, train_push_dir, \
                      train_batch_size, test_batch_size, train_push_batch_size
 
-normalize = transforms.Normalize(mean=mean,
-                                 std=std)
+normalize = transforms.Normalize(mean=mean, std=std)
+
+
+aug_transform = transforms.Compose([
+    transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor()
+])
+vl_transform = transforms.Compose([
+    transforms.ToTensor()
+])
+
+ds_aug = CIFAR10('data', train=True, download=True, transform=aug_transform)
+ds = CIFAR10('data', train=True, download=True, transform=transforms.ToTensor())            
+ds_test = CIFAR10('data', train=False, download=True, transform=vl_transform)
 
 # all datasets
 # train set
-train_dataset = datasets.ImageFolder(
-    train_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-        normalize,
-    ]))
 train_loader = torch.utils.data.DataLoader(
-    train_dataset, batch_size=train_batch_size, shuffle=True,
+    ds_aug, batch_size=train_batch_size, shuffle=True,
     num_workers=4, pin_memory=False)
 # push set
-train_push_dataset = datasets.ImageFolder(
-    train_push_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-    ]))
 train_push_loader = torch.utils.data.DataLoader(
-    train_push_dataset, batch_size=train_push_batch_size, shuffle=False,
+    ds, batch_size=train_push_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 # test set
-test_dataset = datasets.ImageFolder(
-    test_dir,
-    transforms.Compose([
-        transforms.Resize(size=(img_size, img_size)),
-        transforms.ToTensor(),
-        normalize,
-    ]))
 test_loader = torch.utils.data.DataLoader(
-    test_dataset, batch_size=test_batch_size, shuffle=False,
+    ds_test, batch_size=test_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 
 # we should look into distributed sampler more carefully at torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -95,8 +91,9 @@ log('test set size: {0}'.format(len(test_loader.dataset)))
 log('batch size: {0}'.format(train_batch_size))
 
 # construct the model
+print(base_architecture)
 ppnet = model.construct_PPNet(base_architecture=base_architecture,
-                              pretrained=True, img_size=img_size,
+                              pretrained=False, img_size=img_size,
                               prototype_shape=prototype_shape,
                               num_classes=num_classes,
                               prototype_activation_function=prototype_activation_function,

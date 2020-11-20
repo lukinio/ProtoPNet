@@ -1,13 +1,13 @@
-base_architecture = 'vgg19'
-img_size = 224
-prototype_shape = (2000, 128, 1, 1)
-num_classes = 200
+base_architecture = 'resnet18_small'
+img_size = 32
+prototype_shape = (50, 512, 1, 1)
+num_classes = 10
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
 experiment_run = '003'
 
-data_path = './datasets/cub200_cropped/'
+data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
 test_dir = data_path + 'test_cropped/'
 train_push_dir = data_path + 'train_cropped/'
@@ -15,13 +15,17 @@ train_batch_size = 80
 test_batch_size = 100
 train_push_batch_size = 75
 
-joint_optimizer_lrs = {'features': 1e-4,
-                       'add_on_layers': 3e-3,
-                       'prototype_vectors': 3e-3}
+joint_optimizer_lrs = {
+    'features': 1e-4,
+    'add_on_layers': 3e-3,
+    'prototype_vectors': 3e-3
+}
 joint_lr_step_size = 5
 
-warm_optimizer_lrs = {'add_on_layers': 3e-3,
-                      'prototype_vectors': 3e-3}
+warm_optimizer_lrs = {
+    'add_on_layers': 3e-3,
+    'prototype_vectors': 3e-3
+}
 
 last_layer_optimizer_lr = 1e-4
 
