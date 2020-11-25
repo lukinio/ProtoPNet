@@ -20,6 +20,7 @@ import train_and_test as tnt
 import save
 from log import create_logger
 from preprocess import mean, std, preprocess_input_function
+from bag_generator import bag_generator
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-gpuid', nargs=1, type=str, default='0') # python3 main.py -gpuid=0,1,2,3
@@ -58,25 +59,20 @@ from settings import train_dir, test_dir, train_push_dir, \
 normalize = transforms.Normalize(mean=mean, std=std)
 
 
-aug_transform = transforms.Compose([
-    # transforms.RandomCrop(32, padding=4, padding_mode='reflect'), # to CIRAF-10
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    Lambda(lambda x: x.repeat(3, 1, 1) )
-])
-vl_transform = transforms.Compose([
+transformation = transforms.Compose([
     transforms.ToTensor(),
     Lambda(lambda x: x.repeat(3, 1, 1) )
 ])
 
-ds_aug = MNIST('data', train=True, download=True, transform=aug_transform)
-ds = MNIST('data', train=True, download=True, transform=vl_transform)            
-ds_test = MNIST('data', train=False, download=True, transform=vl_transform)
+ds = MNIST('data', train=True, download=True, transform=transformation)            
+ds_test = MNIST('data', train=False, download=True, transform=transformation)
+
+ds, ds_test = bag_generator(ds, ds_test)
 
 # all datasets
 # train set
 train_loader = torch.utils.data.DataLoader(
-    ds_aug, batch_size=train_batch_size, shuffle=True,
+    ds, batch_size=train_batch_size, shuffle=True,
     num_workers=4, pin_memory=False)
 # push set
 train_push_loader = torch.utils.data.DataLoader(
@@ -160,7 +156,7 @@ for epoch in range(num_train_epochs):
             train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
             prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
             class_specific=class_specific,
-            preprocess_input_function=None, #preprocess_input_function, # normalize if needed
+            preprocess_input_function=preprocess_input_function, # normalize if needed
             prototype_layer_stride=1,
             root_dir_for_saving_prototypes=img_dir, # if not None, prototypes will be saved here
             epoch_number=epoch, # if not provided, prototypes saved previously will be overwritten

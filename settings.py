@@ -1,11 +1,11 @@
 base_architecture = 'resnet18_small'
-img_size = 28
-prototype_shape = (50, 512, 1, 1)
-num_classes = 10
+img_size = 112
+prototype_shape = (10, 512, 4, 4)
+num_classes = 2
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
-experiment_run = '005'
+experiment_run = '007'
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
@@ -36,8 +36,8 @@ coefs = {
     'l1': 1e-4,
 }
 
-num_train_epochs = 31
-num_warm_epochs = 5
+num_train_epochs = 16
+num_warm_epochs = 1
 
-push_start = 10
-push_epochs = [i for i in range(num_train_epochs) if i % 10 == 0]
+push_start = 5
+push_epochs = [i for i in range(num_train_epochs) if i % 5 == 0]
