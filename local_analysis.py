@@ -57,9 +57,11 @@ load_model_name = args.model[0] #'10_18push0.7822.pth'
 
 model_base_architecture = load_model_dir.split('/')[2]
 experiment_run = '/'.join(load_model_dir.split('/')[3:])
+model_name = model_base_architecture.split(".")[0]
+img_name = test_image_name.split(".")[0]
 
-save_analysis_path = os.path.join(test_image_dir, model_base_architecture,
-                                  experiment_run, load_model_name)
+save_analysis_path = f"local_analysis/{model_name}/{img_name}"
+#os.path.join(test_image_dir, model_base_architecture, experiment_run, load_model_name)
 makedir(save_analysis_path)
 
 log, logclose = create_logger(log_filename=os.path.join(save_analysis_path, 'local_analysis.log'))
@@ -72,7 +74,18 @@ log('load model from ' + load_model_path)
 log('model base architecture: ' + model_base_architecture)
 log('experiment run: ' + experiment_run)
 
-ppnet = torch.load(load_model_path)
+from settings import base_architecture, img_size, prototype_shape, num_classes, \
+                     prototype_activation_function, add_on_layers_type, experiment_run
+ppnet = model.construct_PPNet(base_architecture=base_architecture,
+                              pretrained=False, img_size=img_size,
+                              prototype_shape=prototype_shape,
+                              num_classes=num_classes,
+                              prototype_activation_function=prototype_activation_function,
+                              add_on_layers_type=add_on_layers_type)
+
+ppnet.load_state_dict(torch.load(load_model_path))
+
+# ppnet = torch.load(load_model_path)
 ppnet = ppnet.cuda()
 ppnet_multi = torch.nn.DataParallel(ppnet)
 
@@ -270,7 +283,7 @@ for i in range(1,11):
     log('--------------------------------------------------------------')
 
 ##### PROTOTYPES FROM TOP-k CLASSES
-k = 50
+k = 2
 log('Prototypes from top-%d classes:' % k)
 topk_logits, topk_classes = torch.topk(logits[idx], k=k)
 for i,c in enumerate(topk_classes.detach().cpu().numpy()):

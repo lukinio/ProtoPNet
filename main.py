@@ -90,7 +90,6 @@ log('test set size: {0}'.format(len(test_loader.dataset)))
 log('batch size: {0}'.format(train_batch_size))
 
 # construct the model
-print(base_architecture)
 ppnet = model.construct_PPNet(base_architecture=base_architecture,
                               pretrained=False, img_size=img_size,
                               prototype_shape=prototype_shape,

@@ -5,7 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
-
+import torchvision.transforms as transforms
+from torchvision.utils import save_image
 
 def generate_stacked_imgs(*, not_nines, nines):
     data = []
@@ -74,3 +75,22 @@ def bag_generator(train_set, test_set):
     trn = create_train_set(train_set)
     tst = create_test_set(test_set)
     return trn, tst
+
+path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged_mnist"
+def create_images(test_set):
+    test_set = create_test_set(test_set)
+    test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1, shuffle=False,
+                                              num_workers=4, pin_memory=False)
+    idx=0
+    for bag, label in test_loader:
+        save_image(bag, f"{path}/test/{label.item()}_{idx}.jpg")
+        idx+=1
+    
+
+if __name__ == "__main__":
+    transformation = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Lambda(lambda x: x.repeat(3, 1, 1) )
+    ])
+    ds_test = MNIST('data', train=False, download=True, transform=transformation)
+    create_images(ds_test)
