@@ -114,12 +114,30 @@ class PPNet(nn.Module):
         self.prototype_vectors = nn.Parameter(torch.rand(self.prototype_shape),
                                               requires_grad=True)
 
+        self.L = 512 * 4 * 4 * 10
+        self.D = 4 * 4 * 10
+        self.K = 1
+
+
+        self.attention_V = nn.Sequential(
+            nn.Linear(self.L, self.D),
+            nn.Tanh()
+        )
+
+        self.attention_U = nn.Sequential(
+            nn.Linear(self.L, self.D),
+            nn.Sigmoid()
+        )
+
+        self.attention_weights = nn.Linear(self.D, self.K)
+
+
         # do not make this just a tensor,
         # since it will not be moved automatically to gpu
         self.ones = nn.Parameter(torch.ones(self.prototype_shape),
                                  requires_grad=False)
 
-        self.last_layer = nn.Linear(self.num_prototypes, self.num_classes,
+        self.last_layer = nn.Linear(self.num_prototypes , self.num_classes,
                                     bias=False)  # do not use bias
 
         if init_weights:
@@ -207,7 +225,34 @@ class PPNet(nn.Module):
                                                    distances.size()[3]))
         min_distances = min_distances.view(-1, self.num_prototypes)
         prototype_activations = self.distance_2_similarity(min_distances)
-        logits = self.last_layer(prototype_activations)
+
+        print(prototype_activations.size())
+        
+        # x = x.squeeze(0)
+
+        # H = self.feature_extractor_part1(x)
+        # H = H.view(-1, 50 * 4 * 4)
+        # H = self.feature_extractor_part2(H)  # NxL
+
+        A_V = self.attention_V(prototype_activations)  # NxD
+        A_U = self.attention_U(prototype_activations)  # NxD
+        A = self.attention_weights(A_V * A_U) # element wise multiplication # NxK
+        A = torch.transpose(A, 1, 0)  # KxN
+        A = F.softmax(A, dim=1)  # softmax over N
+
+        M = torch.mm(A, prototype_activations)  # KxL
+
+
+        print(M.size())
+
+        # Y_prob = self.classifier(M)
+        # Y_hat = torch.ge(Y_prob, 0.5).float()
+
+
+
+        # logits = self.last_layer(prototype_activations)
+        logits = self.last_layer(M)
+
         return logits, min_distances
 
     def push_forward(self, x):

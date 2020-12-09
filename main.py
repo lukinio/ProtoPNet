@@ -8,6 +8,7 @@ import torchvision.transforms as transforms
 from torchvision.transforms import Resize, Compose, Lambda
 import torchvision.datasets as datasets
 from torchvision.datasets import MNIST, CIFAR10
+from mnist_data_loader import MnistBags
 
 import argparse
 import re
@@ -64,10 +65,11 @@ transformation = transforms.Compose([
     Lambda(lambda x: x.repeat(3, 1, 1) )
 ])
 
-ds = MNIST('data', train=True, download=True, transform=transformation)            
-ds_test = MNIST('data', train=False, download=True, transform=transformation)
 
-ds, ds_test = bag_generator(ds, ds_test)
+ds = MnistBags(train=True)            
+ds_test = MnistBags(train=False)
+
+# ds, ds_test = bag_generator(ds, ds_test)
 
 # all datasets
 # train set

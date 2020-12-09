@@ -9,7 +9,7 @@ experiment_run = '007'
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
-test_dir = data_path + 'test_cropped/'
+test_dir = data_path + 'bagged_mnist/test/'
 train_push_dir = data_path + 'train_cropped/'
 train_batch_size = 80
 test_batch_size = 100
