@@ -55,7 +55,7 @@ class MnistBags(data_utils.Dataset):
 
                 if (self.target_number in labels_in_bag) and (label_of_last_bag == 0):
                     labels_in_bag = labels_in_bag >= self.target_number
-                    labels_list.append(labels_in_bag)
+                    labels_list.append(labels_in_bag.to(torch.long))
                     bags_list.append(numbers[indices])
                     label_of_last_bag = 1
                     valid_bags_counter += 1
@@ -72,7 +72,7 @@ class MnistBags(data_utils.Dataset):
                     index_list = np.array(index_list)
                     labels_in_bag = labels[index_list]
                     labels_in_bag = labels_in_bag >= self.target_number
-                    labels_list.append(labels_in_bag)
+                    labels_list.append(labels_in_bag.to(torch.long))
                     bags_list.append(numbers[index_list])
                     label_of_last_bag = 0
                     valid_bags_counter += 1
@@ -107,7 +107,7 @@ class MnistBags(data_utils.Dataset):
 
                 if (self.target_number in labels_in_bag) and (label_of_last_bag == 0):
                     labels_in_bag = labels_in_bag >= self.target_number
-                    labels_list.append(labels_in_bag)
+                    labels_list.append(labels_in_bag.to(torch.long))
                     bags_list.append(numbers[indices])
                     label_of_last_bag = 1
                     valid_bags_counter += 1
@@ -124,7 +124,7 @@ class MnistBags(data_utils.Dataset):
                     index_list = np.array(index_list)
                     labels_in_bag = labels[index_list]
                     labels_in_bag = labels_in_bag >= self.target_number
-                    labels_list.append(labels_in_bag)
+                    labels_list.append(labels_in_bag.to(torch.long))
                     bags_list.append(numbers[index_list])
                     label_of_last_bag = 0
                     valid_bags_counter += 1
@@ -147,7 +147,7 @@ class MnistBags(data_utils.Dataset):
             bag = self.test_bags_list[index]
             label = max(self.test_labels_list[index])
 
-        return bag, 1 if label == 9 else 0
+        return bag, label
 
 
 if __name__ == "__main__":
