@@ -142,10 +142,10 @@ class MnistBags(data_utils.Dataset):
     def __getitem__(self, index):
         if self.train:
             bag = self.train_bags_list[index]
-            label = [max(self.train_labels_list[index]), self.train_labels_list[index]]
+            label = torch.Tensor([max(self.train_labels_list[index])])
         else:
             bag = self.test_bags_list[index]
-            label = [max(self.test_labels_list[index]), self.test_labels_list[index]]
+            label = torch.Tensor([max(self.test_labels_list[index])])
 
         return bag, label
 

@@ -66,7 +66,6 @@ transformation = transforms.Compose([
 ])
 
 
-
 ds = MnistBags(train=True)            
 ds_test = MnistBags(train=False)
 

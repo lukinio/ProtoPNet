@@ -11,9 +11,9 @@ data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
 test_dir = data_path + 'bagged_mnist/test/'
 train_push_dir = data_path + 'train_cropped/'
-train_batch_size = 80
-test_batch_size = 100
-train_push_batch_size = 75
+train_batch_size = 1
+test_batch_size = 1
+train_push_batch_size = 1
 
 joint_optimizer_lrs = {
     'features': 1e-4,

@@ -114,8 +114,8 @@ class PPNet(nn.Module):
         self.prototype_vectors = nn.Parameter(torch.rand(self.prototype_shape),
                                               requires_grad=True)
 
-        self.L = 512 * 4 * 4 * 10
-        self.D = 4 * 4 * 10
+        self.L = 10 * 10
+        self.D = 10
         self.K = 1
 
 
@@ -214,6 +214,7 @@ class PPNet(nn.Module):
             return self.prototype_activation_function(distances)
 
     def forward(self, x):
+        x = x.squeeze(0)
         distances = self.prototype_distances(x)
         '''
         we cannot refactor the lines below for similarity scores
