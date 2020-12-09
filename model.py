@@ -114,7 +114,7 @@ class PPNet(nn.Module):
         self.prototype_vectors = nn.Parameter(torch.rand(self.prototype_shape),
                                               requires_grad=True)
 
-        self.L = 10 * 10
+        self.L = 10
         self.D = 10
         self.K = 1
 
@@ -226,15 +226,12 @@ class PPNet(nn.Module):
                                                    distances.size()[3]))
         min_distances = min_distances.view(-1, self.num_prototypes)
         prototype_activations = self.distance_2_similarity(min_distances)
-
-        print(prototype_activations.size())
         
         # x = x.squeeze(0)
 
         # H = self.feature_extractor_part1(x)
         # H = H.view(-1, 50 * 4 * 4)
         # H = self.feature_extractor_part2(H)  # NxL
-
         A_V = self.attention_V(prototype_activations)  # NxD
         A_U = self.attention_U(prototype_activations)  # NxD
         A = self.attention_weights(A_V * A_U) # element wise multiplication # NxK
@@ -243,8 +240,6 @@ class PPNet(nn.Module):
 
         M = torch.mm(A, prototype_activations)  # KxL
 
-
-        print(M.size())
 
         # Y_prob = self.classifier(M)
         # Y_hat = torch.ge(Y_prob, 0.5).float()

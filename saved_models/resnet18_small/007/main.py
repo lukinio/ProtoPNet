@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-gpuid', nargs=1, type=str, default='0') # python3 main.py -gpuid=0,1,2,3
 args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid[0]
-print(os.environ['CUDA_VISIBLE_DEVICES'])
+print(os.environ['CUDA_VISIBLE_DEVICES'], torch.cuda.is_available())
 
 # book keeping namings and code
 from settings import base_architecture, img_size, prototype_shape, num_classes, \
