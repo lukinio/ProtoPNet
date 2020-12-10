@@ -115,7 +115,7 @@ class PPNet(nn.Module):
                                               requires_grad=True)
 
         self.L = 10
-        self.D = 10
+        self.D = 5
         self.K = 1
 
 

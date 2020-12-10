@@ -1,15 +1,15 @@
 base_architecture = 'resnet18_small'
-img_size = 112
+img_size = 28
 prototype_shape = (10, 512, 4, 4)
 num_classes = 2
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
-experiment_run = '007'
+experiment_run = '010'
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
-test_dir = data_path + 'bagged_mnist/test/'
+test_dir = data_path + 'tmp/test/'
 train_push_dir = data_path + 'train_cropped/'
 train_batch_size = 1
 test_batch_size = 1

@@ -33,7 +33,9 @@ class MnistBags(data_utils.Dataset):
                                                                 download=True,
                                                                 transform=transforms.Compose([
                                                                     transforms.ToTensor(),
-                                                                    transforms.Normalize((0.1307,), (0.3081,))])),
+                                                                    transforms.Lambda(lambda x: x.repeat(3, 1, 1) ),
+                                                                    # transforms.Normalize((0.1307,), (0.3081,))
+                                                                    ])),
                                                  batch_size=self.num_in_train,
                                                  shuffle=False)
 
@@ -85,7 +87,9 @@ class MnistBags(data_utils.Dataset):
                                                                download=True,
                                                                transform=transforms.Compose([
                                                                    transforms.ToTensor(),
-                                                                   transforms.Normalize((0.1307,), (0.3081,))])),
+                                                                   transforms.Lambda(lambda x: x.repeat(3, 1, 1) ),
+                                                                #    transforms.Normalize((0.1307,), (0.3081,))
+                                                                   ])),
                                                 batch_size=self.num_in_test,
                                                 shuffle=False)
 

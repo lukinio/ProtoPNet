@@ -7,6 +7,8 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
+from mnist_data_loader import MnistBags
+import os
 
 def generate_stacked_imgs(*, not_nines, nines):
     data = []
@@ -76,15 +78,29 @@ def bag_generator(train_set, test_set):
     tst = create_test_set(test_set)
     return trn, tst
 
-path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged_mnist"
-def create_images(test_set):
-    test_set = create_test_set(test_set)
-    test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1, shuffle=False,
-                                              num_workers=4, pin_memory=False)
+# path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged_mnist"
+path = "data/tmp"
+def create_images():
+
+    ds_test = MnistBags(train=False)
+
+    # test set
+    test_loader = torch.utils.data.DataLoader(
+        ds_test, batch_size=1, shuffle=False,
+        num_workers=4, pin_memory=False)
+
+    # test_set = create_test_set(test_set)
+    # test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1, shuffle=False,
+                                            #   num_workers=4, pin_memory=False)
     idx=0
     for bag, label in test_loader:
-        save_image(bag, f"{path}/test/{label.item()}_{idx}.jpg")
+        # with open(f"{path}/test/{label.item()}/{idx}.npy", 'wb') as f:
+        #      np.save(f, bag.numpy())
+        bag = bag.squeeze(0)
+        for i, b in enumerate(bag):
+            save_image(b, f"{path}/test/{label.item()}_{i}_{idx}.jpg")
         idx+=1
+        break
     
 
 if __name__ == "__main__":
@@ -92,5 +108,5 @@ if __name__ == "__main__":
         transforms.ToTensor(),
         transforms.Lambda(lambda x: x.repeat(3, 1, 1) )
     ])
-    ds_test = MNIST('data', train=False, download=True, transform=transformation)
-    create_images(ds_test)
+    # ds_test = MNIST('data', train=False, download=True, transform=transformation)
+    create_images()

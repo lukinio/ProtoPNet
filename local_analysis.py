@@ -83,13 +83,13 @@ ppnet = model.construct_PPNet(base_architecture=base_architecture,
                               prototype_activation_function=prototype_activation_function,
                               add_on_layers_type=add_on_layers_type)
 
-ppnet.load_state_dict(torch.load(load_model_path))
+# ppnet.load_state_dict(torch.load(load_model_path))
 
-# ppnet = torch.load(load_model_path)
+ppnet = torch.load(load_model_path)
 ppnet = ppnet.cuda()
 ppnet_multi = torch.nn.DataParallel(ppnet)
 
-img_size = ppnet_multi.module.img_size
+# img_size = ppnet_multi.module.img_size
 prototype_shape = ppnet.prototype_shape
 max_dist = prototype_shape[1] * prototype_shape[2] * prototype_shape[3]
 
@@ -99,7 +99,10 @@ normalize = transforms.Normalize(mean=mean,
                                  std=std)
 
 # load the test data and check test accuracy
+
 from settings import test_dir
+from test_mnist_bag_dataloader import NumpyDataset
+
 if check_test_accu:
     test_batch_size = 100
 
@@ -110,6 +113,10 @@ if check_test_accu:
             transforms.ToTensor(),
             normalize,
         ]))
+    
+    # with open(f'{test_dir}/1/0.npy', 'rb') as f:
+    #     l = np.load(f)
+
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=test_batch_size, shuffle=True,
         num_workers=4, pin_memory=False)
@@ -190,6 +197,9 @@ preprocess = transforms.Compose([
 ])
 
 img_pil = Image.open(test_image_path)
+
+
+
 img_tensor = preprocess(img_pil)
 img_variable = Variable(img_tensor.unsqueeze(0))
 
