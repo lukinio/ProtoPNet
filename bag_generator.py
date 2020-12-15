@@ -78,8 +78,8 @@ def bag_generator(train_set, test_set):
     tst = create_test_set(test_set)
     return trn, tst
 
-# path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged_mnist"
-path = "data/tmp"
+path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged"
+# path = "data/tmp"
 def create_images():
 
     ds_test = MnistBags(train=False)

@@ -17,7 +17,7 @@ import utils_augemntation
 
 class ColonCancerBagsCross(data_utils.Dataset):
     def __init__(self, path, train_val_idxs=None, test_idxs=None, train=True, shuffle_bag=False,
-                 data_augmentation=False, loc_info=False):
+                 data_augmentation=False, loc_info=False, push=False):
         self.path = path
         self.train_val_idxs = train_val_idxs
         self.test_idxs = test_idxs
@@ -26,19 +26,24 @@ class ColonCancerBagsCross(data_utils.Dataset):
         self.data_augmentation = data_augmentation
         self.location_info = loc_info
 
-        self.data_augmentation_img_transform = transforms.Compose([utils_augemntation.RandomHEStain(),
-                                                                   utils_augemntation.HistoNormalize(),
-                                                                   utils_augemntation.RandomRotate(),
-                                                                   utils_augemntation.RandomVerticalFlip(),
-                                                                   transforms.RandomHorizontalFlip(),
-                                                                   transforms.ToTensor(),
-                                                                   transforms.Normalize((0.5, 0.5, 0.5),
-                                                                                        (0.5, 0.5, 0.5))])
+        tr = [utils_augemntation.RandomHEStain(),
+              utils_augemntation.HistoNormalize(),
+              utils_augemntation.RandomRotate(),
+              utils_augemntation.RandomVerticalFlip(),
+              transforms.RandomHorizontalFlip(),
+              transforms.ToTensor()
+        ]
+        tst = [utils_augemntation.HistoNormalize(),
+               transforms.ToTensor()
+        ]
+        if not push:
+            norma = transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
+            tr.append(norma)
+            tst.append(norma)
 
-        self.normalize_to_tensor_transform = transforms.Compose([utils_augemntation.HistoNormalize(),
-                                                                 transforms.ToTensor(),
-                                                                 transforms.Normalize((0.5, 0.5, 0.5),
-                                                                                      (0.5, 0.5, 0.5))])
+        self.data_augmentation_img_transform = transforms.Compose(tr)
+
+        self.normalize_to_tensor_transform = transforms.Compose(tst)
 
         self.dir_list_train, self.dir_list_test = self.split_dir_list(self.path, self.train_val_idxs, self.test_idxs)
         if self.train:
@@ -211,9 +216,9 @@ class ColonCancerBagsCross(data_utils.Dataset):
     def __getitem__(self, index):
         if self.train:
             bag = self.bag_list_train[index]
-            label = [max(self.labels_list_train[index]), self.labels_list_train[index]]
+            label = max(self.labels_list_train[index])
         else:
             bag = self.bag_list_test[index]
-            label = [max(self.labels_list_test[index]), self.labels_list_test[index]]
+            label = max(self.labels_list_test[index])
 
-        return self.transform_and_data_augmentation(bag), label
+        return self.transform_and_data_augmentation(bag), torch.tensor(label, dtype=torch.long)

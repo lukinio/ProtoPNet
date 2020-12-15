@@ -60,7 +60,7 @@ experiment_run = '/'.join(load_model_dir.split('/')[3:])
 model_name = model_base_architecture.split(".")[0]
 img_name = test_image_name.split(".")[0]
 
-save_analysis_path = f"local_analysis/{model_name}/{img_name}"
+save_analysis_path = f"local_analysis/bagged/{model_name}/{img_name}"
 #os.path.join(test_image_dir, model_base_architecture, experiment_run, load_model_name)
 makedir(save_analysis_path)
 
@@ -74,22 +74,11 @@ log('load model from ' + load_model_path)
 log('model base architecture: ' + model_base_architecture)
 log('experiment run: ' + experiment_run)
 
-from settings import base_architecture, img_size, prototype_shape, num_classes, \
-                     prototype_activation_function, add_on_layers_type, experiment_run
-ppnet = model.construct_PPNet(base_architecture=base_architecture,
-                              pretrained=False, img_size=img_size,
-                              prototype_shape=prototype_shape,
-                              num_classes=num_classes,
-                              prototype_activation_function=prototype_activation_function,
-                              add_on_layers_type=add_on_layers_type)
-
-# ppnet.load_state_dict(torch.load(load_model_path))
-
 ppnet = torch.load(load_model_path)
 ppnet = ppnet.cuda()
 ppnet_multi = torch.nn.DataParallel(ppnet)
 
-# img_size = ppnet_multi.module.img_size
+img_size = ppnet_multi.module.img_size
 prototype_shape = ppnet.prototype_shape
 max_dist = prototype_shape[1] * prototype_shape[2] * prototype_shape[3]
 
@@ -99,10 +88,7 @@ normalize = transforms.Normalize(mean=mean,
                                  std=std)
 
 # load the test data and check test accuracy
-
 from settings import test_dir
-from test_mnist_bag_dataloader import NumpyDataset
-
 if check_test_accu:
     test_batch_size = 100
 
@@ -113,10 +99,6 @@ if check_test_accu:
             transforms.ToTensor(),
             normalize,
         ]))
-    
-    # with open(f'{test_dir}/1/0.npy', 'rb') as f:
-    #     l = np.load(f)
-
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=test_batch_size, shuffle=True,
         num_workers=4, pin_memory=False)
@@ -197,14 +179,13 @@ preprocess = transforms.Compose([
 ])
 
 img_pil = Image.open(test_image_path)
-
-
-
 img_tensor = preprocess(img_pil)
 img_variable = Variable(img_tensor.unsqueeze(0))
 
 images_test = img_variable.cuda()
 labels_test = torch.tensor([test_image_label])
+
+print("local analysis: ", images_test.size())
 
 logits, min_distances = ppnet_multi(images_test)
 conv_output, distances = ppnet.push_forward(images_test)
@@ -374,4 +355,3 @@ else:
     log('Prediction is wrong.')
 
 logclose()
-
