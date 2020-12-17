@@ -214,7 +214,7 @@ class PPNet(nn.Module):
             return self.prototype_activation_function(distances)
 
     def forward(self, x):
-        x = x.squeeze(0)
+        # x = x.squeeze(0)
         distances = self.prototype_distances(x)
         '''
         we cannot refactor the lines below for similarity scores

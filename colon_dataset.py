@@ -222,3 +222,21 @@ class ColonCancerBagsCross(data_utils.Dataset):
             label = max(self.labels_list_test[index])
 
         return self.transform_and_data_augmentation(bag), torch.tensor(label, dtype=torch.long)
+
+from torchvision.utils import save_image
+path = "/mnt/users/lpustelnik/local/ProtoPNet/data/colon_bagged"
+if "__main__":
+    ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, 
+                                   train_val_idxs=range(70),
+                                   test_idxs=range(70, 100), push=True)
+
+    test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1, 
+                                              shuffle=False, num_workers=4, 
+                                              pin_memory=False)
+    idx=0
+    for bag, label in test_loader:
+        bag = bag.squeeze(0)
+        for i, b in enumerate(bag):
+            save_image(b, f"{path}/{label.item()}_{i}_{idx}.png")
+        idx+=1
+        break

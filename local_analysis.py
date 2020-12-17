@@ -60,7 +60,7 @@ experiment_run = '/'.join(load_model_dir.split('/')[3:])
 model_name = model_base_architecture.split(".")[0]
 img_name = test_image_name.split(".")[0]
 
-save_analysis_path = f"local_analysis/bagged/{model_name}/{img_name}"
+save_analysis_path = f"local_analysis/colon_bagged/{model_name}/{img_name}"
 #os.path.join(test_image_dir, model_base_architecture, experiment_run, load_model_name)
 makedir(save_analysis_path)
 
