@@ -7,12 +7,13 @@ from resnet_features import resnet18_features, resnet34_features, resnet50_featu
 from densenet_features import densenet121_features, densenet161_features, densenet169_features, densenet201_features
 from vgg_features import vgg11_features, vgg11_bn_features, vgg13_features, vgg13_bn_features, vgg16_features, vgg16_bn_features,\
     vgg19_features, vgg19_bn_features
-from small_resnet_features import small_resnet18_features
+from small_resnet_features import small_resnet18_features, small_resnet18_bottleneck_features
 
 from receptive_field import compute_proto_layer_rf_info_v2
 
 base_architecture_to_features = {
     'resnet18_small': small_resnet18_features,
+    'resnet18_bottleneck_small': small_resnet18_bottleneck_features,
     'resnet18': resnet18_features,
     'resnet34': resnet34_features,
     'resnet50': resnet50_features,
@@ -214,7 +215,7 @@ class PPNet(nn.Module):
             return self.prototype_activation_function(distances)
 
     def forward(self, x):
-        # x = x.squeeze(0)
+        x = x.squeeze(0)
         distances = self.prototype_distances(x)
         '''
         we cannot refactor the lines below for similarity scores
@@ -246,7 +247,8 @@ class PPNet(nn.Module):
 
 
         # logits = self.last_layer(prototype_activations)
-        logits = self.last_layer(M)
+        # logits = self.last_layer(M)
+        logits = torch.sigmoid(self.last_layer(M))
 
         return logits, min_distances
 

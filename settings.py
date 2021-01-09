@@ -1,15 +1,15 @@
 base_architecture = 'resnet18_small'
-img_size = 28
-prototype_shape = (20, 512, 1, 1)
+img_size = 112
+prototype_shape = (20, 512, 4, 4)
 num_classes = 2
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
-experiment_run = '014'
+experiment_run = '025'
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
-test_dir = data_path + 'bagged/test/'
+test_dir = data_path + 'bagged_mnist/test/'
 train_push_dir = data_path + 'train_cropped/'
 train_batch_size = 1
 test_batch_size = 1
@@ -36,8 +36,8 @@ coefs = {
     'l1': 1e-4,
 }
 
-num_train_epochs = 31
-num_warm_epochs = 5
+num_train_epochs = 36
+num_warm_epochs = 3
 
 push_start = 10
-push_epochs = [i for i in range(num_train_epochs) if i % 10 == 0]
+push_epochs = [i for i in range(num_train_epochs) if i % 5 == 0]

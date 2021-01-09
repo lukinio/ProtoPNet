@@ -100,8 +100,8 @@ class ResNet(nn.Module):
         self.paddings = [1]
         self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=1)
+        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=1)
+        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes, bias=False)
 
     def _make_layer(self, block, planes, num_blocks, stride):
@@ -141,6 +141,19 @@ def small_resnet18_features(pretrained=False, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
+    if pretrained:
+        my_dict = model_zoo.load_url(model_urls['resnet18'], model_dir=model_dir)
+        my_dict.pop('fc.weight')
+        my_dict.pop('fc.bias')
+        model.load_state_dict(my_dict, strict=False)
+    return model
+
+def small_resnet18_bottleneck_features(pretrained=False, **kwargs):
+    """Constructs a ResNet-18 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNet(Bottleneck, [2, 2, 2, 2], **kwargs)
     if pretrained:
         my_dict = model_zoo.load_url(model_urls['resnet18'], model_dir=model_dir)
         my_dict.pop('fc.weight')

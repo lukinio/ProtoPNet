@@ -9,6 +9,7 @@ from torchvision.transforms import Resize, Compose, Lambda
 import torchvision.datasets as datasets
 from torchvision.datasets import MNIST, CIFAR10
 from mnist_data_loader import MnistBags
+from plot_logs import plot_logs, plot_conf_matrix
 
 import argparse
 import re
@@ -40,6 +41,8 @@ if "small" in base_architecture:
 
 model_dir = './saved_models/' + base_architecture + '/' + experiment_run + '/'
 makedir(model_dir)
+makedir(model_dir+"logs/")
+makedir(model_dir+"logs/conf_matrix/")
 shutil.copy(src=os.path.join(os.getcwd(), __file__), dst=model_dir)
 shutil.copy(src=os.path.join(os.getcwd(), 'settings.py'), dst=model_dir)
 shutil.copy(src=os.path.join(os.getcwd(), base_architecture_type + '_features.py'), dst=model_dir)
@@ -66,12 +69,15 @@ normalize = transforms.Normalize(mean=mean, std=std)
 #     Lambda(lambda x: x.repeat(3, 1, 1) )
 # ])
 
+# split_val = 70
+# train_range, test_range = range(split_val), range(split_val, 100)
 
-ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=range(70), test_idxs=range(70, 100))            
-ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=range(70), test_idxs=range(70, 100), push=True)            
-ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=range(70), test_idxs=range(70, 100))
+# ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range)            
+# ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range, push=True)            
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
 
-# ds, ds_test = bag_generator(ds, ds_test)
+ds = MnistBags(train=True)            
+ds_test = MnistBags(train=False)
 
 # all datasets
 # train set
@@ -80,7 +86,7 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=4, pin_memory=False)
 # push set
 train_push_loader = torch.utils.data.DataLoader(
-    ds_push, batch_size=train_push_batch_size, shuffle=False,
+    ds, batch_size=train_push_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 # test set
 test_loader = torch.utils.data.DataLoader(
@@ -135,7 +141,17 @@ from settings import num_train_epochs, num_warm_epochs, push_start, push_epochs
 
 # train the model
 log('start training')
+ACCURACY = 0.9 # over this accuracy save model
+train_total_loss, train_acc = [], []
+train_cross_ent, train_cluster_cost, train_sep_cost = [], [], []
+
+test_total_loss, test_acc = [], []
+test_cross_ent, test_cluster_cost, test_sep_cost = [], [], []
+
+push_total_loss, push_acc = [], []
+push_cross_ent, push_cluster_cost, push_sep_cost = [], [], []
 import copy
+from sklearn.metrics import plot_confusion_matrix
 for epoch in range(num_train_epochs):
     log('epoch: \t{0}'.format(epoch))
 
@@ -146,14 +162,46 @@ for epoch in range(num_train_epochs):
     else:
         tnt.joint(model=ppnet_multi, log=log)
         # joint_lr_scheduler.step() # Move after optimizer.step()
-        _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=joint_optimizer,
+        tmp = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=joint_optimizer,
                       class_specific=class_specific, coefs=coefs, log=log)
         joint_lr_scheduler.step()
+        # update logs
+        train_acc.append(tmp[0])
+        train_cross_ent.append(tmp[1])
+        train_cluster_cost.append(tmp[2])
+        train_sep_cost.append(tmp[3])
+        train_total_loss.append(tmp[1]+tmp[2]+tmp[3])
+        
 
-    accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+    tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
                     class_specific=class_specific, log=log)
+    # update logs
+    accu = tmp[0]
+    test_acc.append(accu)
+    test_cross_ent.append(tmp[1])
+    test_cluster_cost.append(tmp[2])
+    test_sep_cost.append(tmp[3])
+    test_total_loss.append(tmp[1]+tmp[2]+tmp[3])
+
     save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'nopush', accu=accu,
-                                target_accu=0.70, log=log)
+                                target_accu=ACCURACY, log=log)
+    
+    if epoch % 1 == 0:
+        TP, FP = 0, 0
+        FN, TN = 0, 0
+        for inputs, targets in test_loader:
+            inputs, targets = inputs.cuda(), targets.cuda()
+            outputs, _ = ppnet(inputs)
+            predicted = torch.argmax(outputs, dim=1)
+
+            TP += (predicted == targets == 1).sum().item()
+            FP += (predicted == 1 and predicted != targets).sum().item()
+            TN += (predicted == targets == 0).sum().item()
+            FN += (predicted == 0 and predicted != targets).sum().item()
+
+        plot_conf_matrix([[TP, FP], [FN, TN]],
+                         epoch, model_dir+"logs/conf_matrix/")
+        
 
     if epoch >= push_start and epoch in push_epochs:
         push.push_prototypes(
@@ -171,19 +219,31 @@ for epoch in range(num_train_epochs):
             log=log)
         accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
                         class_specific=class_specific, log=log)
+        # update logs
+        accu = tmp[0]
+        push_acc.append(tmp[0])
+        push_cross_ent.append(tmp[1])
+        push_cluster_cost.append(tmp[2])
+        push_sep_cost.append(tmp[3])
+        push_total_loss.append(tmp[1]+tmp[2]+tmp[3])
         save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'push', accu=accu,
-                                    target_accu=0.70, log=log)
+                                    target_accu=ACCURACY, log=log)
 
         if prototype_activation_function != 'linear':
             tnt.last_only(model=ppnet_multi, log=log)
-            for i in range(20):
+            for i in range(10):
                 log('iteration: \t{0}'.format(i))
                 _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=last_layer_optimizer,
                               class_specific=class_specific, coefs=coefs, log=log)
-                accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+                tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
                                 class_specific=class_specific, log=log)
+                accu = tmp[0]
                 save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
-                                            target_accu=0.70, log=log)
-   
+                                            target_accu=ACCURACY, log=log)
+
+
+plot_logs(model_dir+"logs/train_", train_acc, train_total_loss, train_cross_ent, train_cluster_cost, train_sep_cost)
+plot_logs(model_dir+"logs/push_", push_acc, push_total_loss, push_cross_ent, push_cluster_cost, push_sep_cost)
+plot_logs(model_dir+"logs/test_", test_acc, test_total_loss, test_cross_ent, test_cluster_cost, test_sep_cost)
 logclose()
 

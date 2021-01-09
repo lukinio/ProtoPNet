@@ -15,6 +15,7 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
     n_examples = 0
     n_correct = 0
     n_batches = 0
+    total_loss = 0.
     total_cross_entropy = 0
     total_cluster_cost = 0
     # separation cost is meaningful only for class_specific
@@ -33,7 +34,7 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
             output, min_distances = model(input)
 
             # compute loss
-            cross_entropy = torch.nn.functional.cross_entropy(output, target)
+            cross_entropy = torch.nn.functional.cross_entropy(output, target, weight=torch.tensor([0.1, 0.9]).cuda())
 
             if class_specific:
                 max_dist = (model.module.prototype_shape[1]
@@ -80,24 +81,25 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
             total_avg_separation_cost += avg_separation_cost.item()
 
         # compute gradient and do SGD step
-        if is_train:
-            if class_specific:
-                if coefs is not None:
-                    loss = (coefs['crs_ent'] * cross_entropy
-                          + coefs['clst'] * cluster_cost
-                          + coefs['sep'] * separation_cost
-                          + coefs['l1'] * l1)
-                else:
-                    loss = cross_entropy + 0.8 * cluster_cost - 0.08 * separation_cost + 1e-4 * l1
+        if class_specific:
+            if coefs is not None:
+                loss = (coefs['crs_ent'] * cross_entropy
+                        + coefs['clst'] * cluster_cost
+                        + coefs['sep'] * separation_cost
+                        + coefs['l1'] * l1)
             else:
-                if coefs is not None:
-                    loss = (coefs['crs_ent'] * cross_entropy
-                          + coefs['clst'] * cluster_cost
-                          + coefs['l1'] * l1)
-                else:
-                    loss = cross_entropy + 0.8 * cluster_cost + 1e-4 * l1
+                loss = cross_entropy + 0.8 * cluster_cost - 0.08 * separation_cost + 1e-4 * l1
+        else:
+            if coefs is not None:
+                loss = (coefs['crs_ent'] * cross_entropy
+                        + coefs['clst'] * cluster_cost
+                        + coefs['l1'] * l1)
+            else:
+                loss = cross_entropy + 0.8 * cluster_cost + 1e-4 * l1
+        if is_train:
             optimizer.zero_grad()
             loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5) # gradient clipping
             optimizer.step()
 
         del input
@@ -106,13 +108,18 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
         del predicted
         del min_distances
 
+    total_cross_entropy /= n_batches
+    total_cluster_cost /= n_batches
+    total_separation_cost /= n_batches
+    total_loss = total_cross_entropy + total_cluster_cost + total_separation_cost
     end = time.time()
 
     log('\ttime: \t{0}'.format(end -  start))
-    log('\tcross ent: \t{0}'.format(total_cross_entropy / n_batches))
-    log('\tcluster: \t{0}'.format(total_cluster_cost / n_batches))
+    log('\ttotal loss: \t{0}'.format(total_loss))
+    log('\tcross ent: \t{0}'.format(total_cross_entropy))
+    log('\tcluster: \t{0}'.format(total_cluster_cost))
     if class_specific:
-        log('\tseparation:\t{0}'.format(total_separation_cost / n_batches))
+        log('\tseparation:\t{0}'.format(total_separation_cost))
         log('\tavg separation:\t{0}'.format(total_avg_separation_cost / n_batches))
     log('\taccu: \t\t{0}%'.format(n_correct / n_examples * 100))
     log('\tl1: \t\t{0}'.format(model.module.last_layer.weight.norm(p=1).item()))
@@ -120,8 +127,8 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
     with torch.no_grad():
         p_avg_pair_dist = torch.mean(list_of_distances(p, p))
     log('\tp dist pair: \t{0}'.format(p_avg_pair_dist.item()))
-
-    return n_correct / n_examples
+    
+    return n_correct / n_examples, total_cross_entropy, total_cluster_cost, total_separation_cost
 
 
 def train(model, dataloader, optimizer, class_specific=False, coefs=None, log=print):
