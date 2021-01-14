@@ -245,9 +245,7 @@ for epoch in range(num_train_epochs):
                 conv_cluster_cost.append(tmp[2])
                 conv_sep_cost.append(tmp[3])
                 conv_total_loss.append(tmp[1]+tmp[2]+tmp[3])
-                plot_logs(model_dir+"logs/conv_"+str(epoch)+"_", conv_acc, conv_total_loss, conv_cross_ent, conv_cluster_cost, conv_sep_cost)
-
-
+                
                 save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
                                             target_accu=ACCURACY, log=log)
                 with torch.no_grad():
@@ -265,6 +263,8 @@ for epoch in range(num_train_epochs):
 
                     plot_conf_matrix([[TP, FP], [FN, TN]], str(epoch)+"_iter_"+str(i),
                                     model_dir+"logs/conf_matrix/")
+                
+            plot_logs(model_dir+"logs/conv_"+str(epoch)+"_", conv_acc, conv_total_loss, conv_cross_ent, conv_cluster_cost, conv_sep_cost)
 
 
 plot_logs(model_dir+"logs/train_", train_acc, train_total_loss, train_cross_ent, train_cluster_cost, train_sep_cost)
