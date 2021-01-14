@@ -247,8 +247,8 @@ class PPNet(nn.Module):
 
 
         # logits = self.last_layer(prototype_activations)
-        # logits = self.last_layer(M)
-        logits = torch.sigmoid(self.last_layer(M))
+        logits = self.last_layer(M)
+        # logits = torch.sigmoid(self.last_layer(M))
 
         return logits, min_distances
 

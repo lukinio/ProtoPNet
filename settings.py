@@ -1,11 +1,11 @@
 base_architecture = 'resnet18_small'
-img_size = 112
-prototype_shape = (20, 512, 4, 4)
+img_size = 27
+prototype_shape = (20, 512, 2, 2)
 num_classes = 2
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
 
-experiment_run = '025'
+experiment_run = '026'
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
@@ -16,7 +16,7 @@ test_batch_size = 1
 train_push_batch_size = 1
 
 joint_optimizer_lrs = {
-    'features': 1e-4,
+    'features': 1e-3,
     'add_on_layers': 3e-3,
     'prototype_vectors': 3e-3
 }
@@ -27,7 +27,7 @@ warm_optimizer_lrs = {
     'prototype_vectors': 3e-3
 }
 
-last_layer_optimizer_lr = 1e-4
+last_layer_optimizer_lr = 1e-3
 
 coefs = {
     'crs_ent': 1,

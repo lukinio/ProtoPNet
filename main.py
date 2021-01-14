@@ -69,15 +69,15 @@ normalize = transforms.Normalize(mean=mean, std=std)
 #     Lambda(lambda x: x.repeat(3, 1, 1) )
 # ])
 
-# split_val = 70
-# train_range, test_range = range(split_val), range(split_val, 100)
+split_val = 70
+train_range, test_range = range(split_val), range(split_val, 100)
 
-# ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range)            
-# ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range, push=True)            
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
+ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range)            
+ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range, push=True)            
+ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
 
-ds = MnistBags(train=True)            
-ds_test = MnistBags(train=False)
+# ds = MnistBags(train=True)            
+# ds_test = MnistBags(train=False)
 
 # all datasets
 # train set
@@ -86,7 +86,7 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=4, pin_memory=False)
 # push set
 train_push_loader = torch.utils.data.DataLoader(
-    ds, batch_size=train_push_batch_size, shuffle=False,
+    ds_push, batch_size=train_push_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 # test set
 test_loader = torch.utils.data.DataLoader(
@@ -186,7 +186,7 @@ for epoch in range(num_train_epochs):
     save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'nopush', accu=accu,
                                 target_accu=ACCURACY, log=log)
     
-    if epoch % 1 == 0:
+    with torch.no_grad():
         TP, FP = 0, 0
         FN, TN = 0, 0
         for inputs, targets in test_loader:
@@ -217,7 +217,7 @@ for epoch in range(num_train_epochs):
             proto_bound_boxes_filename_prefix=proto_bound_boxes_filename_prefix,
             save_prototype_class_identity=True,
             log=log)
-        accu = tnt.test(model=ppnet_multi, dataloader=test_loader,
+        tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
                         class_specific=class_specific, log=log)
         # update logs
         accu = tmp[0]

@@ -1,5 +1,6 @@
 import time
 import torch
+import focal_loss
 
 from helpers import list_of_distances, make_one_hot
 
@@ -34,7 +35,9 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
             output, min_distances = model(input)
 
             # compute loss
-            cross_entropy = torch.nn.functional.cross_entropy(output, target, weight=torch.tensor([0.1, 0.9]).cuda())
+            # cross_entropy = torch.nn.functional.cross_entropy(output, target, weight=torch.tensor([0.1, 0.9]).cuda())
+            # cross_entropy = torch.nn.functional.cross_entropy(output, target)
+            cross_entropy = focal_loss.FocalLoss(alpha=1, gamma=2)(output, target)
 
             if class_specific:
                 max_dist = (model.module.prototype_shape[1]
