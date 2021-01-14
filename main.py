@@ -69,15 +69,15 @@ normalize = transforms.Normalize(mean=mean, std=std)
 #     Lambda(lambda x: x.repeat(3, 1, 1) )
 # ])
 
-split_val = 70
-train_range, test_range = range(split_val), range(split_val, 100)
+# split_val = 70
+# train_range, test_range = range(split_val), range(split_val, 100)
 
-ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range)            
-ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range, push=True)            
-ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
+# ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range)            
+# ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range, push=True)            
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
 
-# ds = MnistBags(train=True)            
-# ds_test = MnistBags(train=False)
+ds = MnistBags(train=True)            
+ds_test = MnistBags(train=False)
 
 # all datasets
 # train set
@@ -86,7 +86,7 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=4, pin_memory=False)
 # push set
 train_push_loader = torch.utils.data.DataLoader(
-    ds_push, batch_size=train_push_batch_size, shuffle=False,
+    ds, batch_size=train_push_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 # test set
 test_loader = torch.utils.data.DataLoader(
@@ -199,11 +199,13 @@ for epoch in range(num_train_epochs):
             TN += (predicted == targets == 0).sum().item()
             FN += (predicted == 0 and predicted != targets).sum().item()
 
-        plot_conf_matrix([[TP, FP], [FN, TN]],
-                         epoch, model_dir+"logs/conf_matrix/")
+        plot_conf_matrix([[TP, FP], [FN, TN]], str(epoch),
+                         model_dir+"logs/conf_matrix/")
         
 
     if epoch >= push_start and epoch in push_epochs:
+        conv_total_loss, conv_acc = [], []
+        conv_cross_ent, conv_cluster_cost, conv_sep_cost = [], [], []
         push.push_prototypes(
             train_push_loader, # pytorch dataloader (must be unnormalized in [0,1])
             prototype_network_parallel=ppnet_multi, # pytorch network with prototype_vectors
@@ -238,8 +240,31 @@ for epoch in range(num_train_epochs):
                 tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
                                 class_specific=class_specific, log=log)
                 accu = tmp[0]
+                conv_acc.append(accu)
+                conv_cross_ent.append(tmp[1])
+                conv_cluster_cost.append(tmp[2])
+                conv_sep_cost.append(tmp[3])
+                conv_total_loss.append(tmp[1]+tmp[2]+tmp[3])
+                plot_logs(model_dir+"logs/conv_"+str(epoch)+"_", conv_acc, conv_total_loss, conv_cross_ent, conv_cluster_cost, conv_sep_cost)
+
+
                 save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
                                             target_accu=ACCURACY, log=log)
+                with torch.no_grad():
+                    TP, FP = 0, 0
+                    FN, TN = 0, 0
+                    for inputs, targets in test_loader:
+                        inputs, targets = inputs.cuda(), targets.cuda()
+                        outputs, _ = ppnet(inputs)
+                        predicted = torch.argmax(outputs, dim=1)
+
+                        TP += (predicted == targets == 1).sum().item()
+                        FP += (predicted == 1 and predicted != targets).sum().item()
+                        TN += (predicted == targets == 0).sum().item()
+                        FN += (predicted == 0 and predicted != targets).sum().item()
+
+                    plot_conf_matrix([[TP, FP], [FN, TN]], str(epoch)+"_iter_"+str(i),
+                                    model_dir+"logs/conf_matrix/")
 
 
 plot_logs(model_dir+"logs/train_", train_acc, train_total_loss, train_cross_ent, train_cluster_cost, train_sep_cost)

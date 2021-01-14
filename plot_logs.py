@@ -19,6 +19,7 @@ def plot_logs(prefix, acc, *loss):
     for i, arr in enumerate(loss):
         ax.plot(x, arr, label=names[i])
     ax.set_xlabel('epochs')
+    ax.set_ylim(top=1.5)
     ax.legend(loc="best")
     fig.savefig(prefix+'loss.png', dpi=fig.dpi)
 
@@ -48,9 +49,9 @@ def plot_conf_matrix(conf_matrix, epoch, path):
     plt.yticks(tick_marks, tick_marks)
     plt.ylabel('Actual')
     plt.xlabel('Predict')
-    plt.title("epoch "+str(epoch))
+    plt.title("epoch "+epoch)
     plt.colorbar()
-    fig.savefig(path+str(epoch)+'_conf_matrix.png', dpi=fig.dpi)
+    fig.savefig(path+epoch+'_conf_matrix.png', dpi=fig.dpi)
 
 
 if __name__ == "__main__":
