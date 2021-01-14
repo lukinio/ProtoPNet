@@ -187,7 +187,7 @@ labels_test = torch.tensor([test_image_label])
 
 print("local analysis: ", images_test.size())
 
-logits, min_distances = ppnet_multi(images_test)
+logits, min_distances = ppnet_multi(images_test.unsqueeze(0))
 conv_output, distances = ppnet.push_forward(images_test)
 prototype_activations = ppnet.distance_2_similarity(min_distances)
 prototype_activation_patterns = ppnet.distance_2_similarity(distances)
