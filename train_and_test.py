@@ -172,6 +172,9 @@ def warm_only(model, log=print):
     for p in model.module.add_on_layers.parameters():
         p.requires_grad = True
     model.module.prototype_vectors.requires_grad = True
+    model.module.attention_V.requires_grad = True
+    model.module.attention_U.requires_grad = True
+    model.module.attention_weights.requires_grad = True
     for p in model.module.last_layer.parameters():
         p.requires_grad = True
     
@@ -184,6 +187,9 @@ def joint(model, log=print):
     for p in model.module.add_on_layers.parameters():
         p.requires_grad = True
     model.module.prototype_vectors.requires_grad = True
+    model.module.attention_V.requires_grad = True
+    model.module.attention_U.requires_grad = True
+    model.module.attention_weights.requires_grad = True
     for p in model.module.last_layer.parameters():
         p.requires_grad = True
     
