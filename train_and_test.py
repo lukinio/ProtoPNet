@@ -156,6 +156,10 @@ def last_only(model, log=print):
     for p in model.module.add_on_layers.parameters():
         p.requires_grad = False
     model.module.prototype_vectors.requires_grad = False
+    # freeze attention layers
+    model.module.attention_V.requires_grad = False
+    model.module.attention_U.requires_grad = False
+    model.module.attention_weights.requires_grad = False
     for p in model.module.last_layer.parameters():
         p.requires_grad = True
     
