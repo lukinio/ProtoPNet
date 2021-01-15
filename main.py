@@ -57,6 +57,12 @@ prototype_img_filename_prefix = 'prototype-img'
 prototype_self_act_filename_prefix = 'prototype-self-act'
 proto_bound_boxes_filename_prefix = 'bb'
 
+
+seed = torch.seed()
+torch.manual_seed(seed)
+log(f"seed: {seed}")
+
+
 # load the data
 from settings import train_dir, test_dir, train_push_dir, \
     train_batch_size, test_batch_size, train_push_batch_size
@@ -71,14 +77,14 @@ normalize = transforms.Normalize(mean=mean, std=std)
 split_val = 70
 train_range, test_range = range(split_val), range(split_val, 100)
 
-ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
-                          shuffle_bag=True)
-ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
-                               push=True, shuffle_bag=True)
-ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
+# ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
+#                           shuffle_bag=True)
+# ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
+#                                push=True, shuffle_bag=True)
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
 
-# ds = MnistBags(train=True)
-# ds_test = MnistBags(train=False)
+ds = MnistBags(train=True)
+ds_test = MnistBags(train=False)
 
 # all datasets
 # train set
@@ -87,7 +93,7 @@ train_loader = torch.utils.data.DataLoader(
     num_workers=4, pin_memory=False)
 # push set
 train_push_loader = torch.utils.data.DataLoader(
-    ds_push, batch_size=train_push_batch_size, shuffle=False,
+    ds, batch_size=train_push_batch_size, shuffle=False,
     num_workers=4, pin_memory=False)
 # test set
 test_loader = torch.utils.data.DataLoader(
@@ -115,27 +121,74 @@ class_specific = True
 
 # define optimizer
 from settings import joint_optimizer_lrs, joint_lr_step_size
-
-joint_optimizer_specs = \
-    [{'params': ppnet.features.parameters(), 'lr': joint_optimizer_lrs['features'], 'weight_decay': 1e-3},
+from copy import deepcopy
+joint_optimizer_specs = [
+    {
+        'params': ppnet.features.parameters(),
+        'lr': joint_optimizer_lrs['features'],
+        'weight_decay': 1e-3
+    },
      # bias are now also being regularized
-     {'params': ppnet.add_on_layers.parameters(), 'lr': joint_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
-     {'params': ppnet.prototype_vectors, 'lr': joint_optimizer_lrs['prototype_vectors']},
-     ]
+    {
+         'params': ppnet.add_on_layers.parameters(),
+         'lr': joint_optimizer_lrs['add_on_layers'],
+         'weight_decay': 1e-3
+    },
+    {
+        'params': ppnet.prototype_vectors,
+        'lr': joint_optimizer_lrs['prototype_vectors']
+    },
+    {
+        'params': ppnet.attention_V.parameters(),
+        'lr': joint_optimizer_lrs['attention']
+    },
+    {
+        'params': ppnet.attention_U.parameters(),
+        'lr': joint_optimizer_lrs['attention']
+    },
+    {
+        'params': ppnet.attention_weights.parameters(),
+        'lr': joint_optimizer_lrs['attention']
+    }
+]
 joint_optimizer = torch.optim.Adam(joint_optimizer_specs)
 joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1)
 
 from settings import warm_optimizer_lrs
 
-warm_optimizer_specs = \
-    [{'params': ppnet.add_on_layers.parameters(), 'lr': warm_optimizer_lrs['add_on_layers'], 'weight_decay': 1e-3},
-     {'params': ppnet.prototype_vectors, 'lr': warm_optimizer_lrs['prototype_vectors']},
-     ]
+warm_optimizer_specs = [
+    {
+        'params': ppnet.add_on_layers.parameters(),
+        'lr': warm_optimizer_lrs['add_on_layers'],
+        'weight_decay': 1e-3
+    },
+    {
+        'params': ppnet.attention_V.parameters(),
+        'lr': warm_optimizer_lrs['attention']
+    },
+    {
+        'params': ppnet.attention_U.parameters(),
+        'lr': warm_optimizer_lrs['attention']
+    },
+    {
+        'params': ppnet.attention_weights.parameters(),
+        'lr': warm_optimizer_lrs['attention']
+    },
+    {
+        'params': ppnet.prototype_vectors,
+        'lr': warm_optimizer_lrs['prototype_vectors']
+    },
+]
 warm_optimizer = torch.optim.Adam(warm_optimizer_specs)
 
 from settings import last_layer_optimizer_lr
 
-last_layer_optimizer_specs = [{'params': ppnet.last_layer.parameters(), 'lr': last_layer_optimizer_lr}]
+last_layer_optimizer_specs = [
+    {
+        'params': ppnet.last_layer.parameters(),
+        'lr': last_layer_optimizer_lr
+    }
+]
 last_layer_optimizer = torch.optim.Adam(last_layer_optimizer_specs)
 
 # weighting of different training losses
@@ -180,6 +233,8 @@ for epoch in range(num_train_epochs):
 
     tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
                    class_specific=class_specific, log=log)
+
+    
     # update logs
     accu = tmp[0]
     test_acc.append(accu)
@@ -237,7 +292,7 @@ for epoch in range(num_train_epochs):
 
         if prototype_activation_function != 'linear':
             tnt.last_only(model=ppnet_multi, log=log)
-            for i in range(10):
+            for i in range(15):
                 log('iteration: \t{0}'.format(i))
                 _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=last_layer_optimizer,
                               class_specific=class_specific, coefs=coefs, log=log)

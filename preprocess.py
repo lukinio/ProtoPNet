@@ -6,7 +6,7 @@ std = (0.5, 0.5, 0.5)
 # std = (0.229, 0.224, 0.225)
 
 def preprocess(x, mean, std):
-    print(x.size())
+    # print(x.size())
     assert x.size(1) == 3
     y = torch.zeros_like(x)
     for i in range(3):
