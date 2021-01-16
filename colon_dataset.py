@@ -17,7 +17,7 @@ import utils_augemntation
 
 class ColonCancerBagsCross(data_utils.Dataset):
     def __init__(self, path, train_val_idxs=None, test_idxs=None, train=True, shuffle_bag=False,
-                 data_augmentation=False, loc_info=False, push=False):
+                 data_augmentation=False, loc_info=False, push=False, nucleus_type=None):
         self.path = path
         self.train_val_idxs = train_val_idxs
         self.test_idxs = test_idxs
@@ -25,6 +25,7 @@ class ColonCancerBagsCross(data_utils.Dataset):
         self.shuffle_bag = shuffle_bag
         self.data_augmentation = data_augmentation
         self.location_info = loc_info
+        self.nucleus_type = nucleus_type
 
         tr = [utils_augemntation.RandomHEStain(),
               utils_augemntation.HistoNormalize(),
@@ -37,7 +38,7 @@ class ColonCancerBagsCross(data_utils.Dataset):
                transforms.ToTensor()
         ]
         if not push:
-            norma = transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))
+            norma = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
             tr.append(norma)
             tst.append(norma)
 
@@ -47,9 +48,15 @@ class ColonCancerBagsCross(data_utils.Dataset):
 
         self.dir_list_train, self.dir_list_test = self.split_dir_list(self.path, self.train_val_idxs, self.test_idxs)
         if self.train:
-            self.bag_list_train, self.labels_list_train = self.create_bags(self.dir_list_train)
+            if nucleus_type:
+                self.bag_list_train, self.labels_list_train = self.create_bags_one_type(self.dir_list_train)
+            else:
+                self.bag_list_train, self.labels_list_train = self.create_bags(self.dir_list_train)
         else:
-            self.bag_list_test, self.labels_list_test = self.create_bags(self.dir_list_test)
+            if nucleus_type:
+                self.bag_list_test, self.labels_list_test = self.create_bags_one_type(self.dir_list_test)
+            else:
+                self.bag_list_test, self.labels_list_test = self.create_bags(self.dir_list_test)
 
     @staticmethod
     def split_dir_list(path, train_val_idxs, test_idxs):
@@ -61,6 +68,95 @@ class ColonCancerBagsCross(data_utils.Dataset):
         dir_list_test = [dirs[i] for i in test_idxs]
 
         return dir_list_train, dir_list_test
+
+    def create_bags_one_type(self, dir_list):
+        """Create bags containing only one type of nucleus."""
+        bag_list = []
+        labels_list = []
+        for dir in dir_list:
+            # Get image name
+            img_name = dir.split('/')[-1]
+
+            # bmp to pillow
+            img_dir = dir + '/' + img_name + '.bmp'
+            img = io.imread(img_dir)
+            if img.shape[2] == 4:
+                img = color.rgba2rgb(img)
+
+            if self.location_info:
+                xs = np.arange(0, 500)
+                xs = np.asarray([xs for i in range(500)])
+                ys = xs.transpose()
+                img = np.dstack((img, xs, ys))
+
+            # crop nucleus_type cells
+            dir_nucleus_type = dir + '/' + img_name + '_' + self.nucleus_type +'.mat'
+            with open(dir_nucleus_type, 'rb') as f:
+                mat_nucleus_type = scipy.io.loadmat(f)
+
+            cropped_cells = []
+            for (x, y) in mat_nucleus_type['detection']:
+                x = np.round(x)
+                y = np.round(y)
+
+                if self.data_augmentation:
+                    x = x + np.round(np.random.normal(0, 3, 1))
+                    y = y + np.round(np.random.normal(0, 3, 1))
+
+                if x < 13:
+                    x_start = 0
+                    x_end = 27
+                elif x > 500 - 14:
+                    x_start = 500 - 27
+                    x_end = 500
+                else:
+                    x_start = x - 13
+                    x_end = x + 14
+
+                if y < 13:
+                    y_start = 0
+                    y_end = 27
+                elif y > 500 - 14:
+                    y_start = 500 - 27
+                    y_end = 500
+                else:
+                    y_start = y - 13
+                    y_end = y + 14
+
+                cropped_cells.append(img[int(y_start):int(y_end), int(x_start):int(x_end)])
+
+            # if image doesn't contain any specific type nucleus, move to the next image
+            if cropped_cells == []:
+                continue
+
+            # generate bag
+            bag = cropped_cells
+
+            # store single cell labels
+            if self.nucleus_type == 'epithelial':
+                labels = np.ones(len(cropped_cells))
+            else:
+                labels = np.zeros(len(cropped_cells))
+
+            # shuffle
+            if self.shuffle_bag:
+                zip_bag_labels = list(zip(bag, labels))
+                random.shuffle(zip_bag_labels)
+                bag, labels = zip(*zip_bag_labels)
+
+            # append every bag two times if training
+            if self.train:
+                for _ in [0, 1]:
+                    bag_list.append(bag)
+                    labels_list.append(labels)
+            else:
+                bag_list.append(bag)
+                labels_list.append(labels)
+
+            # bag_list.append(bag)
+            # labels_list.append(labels)
+
+        return bag_list, labels_list
 
     def create_bags(self, dir_list):
         bag_list = []
@@ -221,7 +317,7 @@ class ColonCancerBagsCross(data_utils.Dataset):
             bag = self.bag_list_test[index]
             label = max(self.labels_list_test[index])
 
-        return self.transform_and_data_augmentation(bag), torch.tensor(label, dtype=torch.long)
+        return self.transform_and_data_augmentation(bag), torch.tensor(int(label), dtype=torch.long)
 
 # from torchvision.utils import save_image
 # path = "/mnt/users/lpustelnik/local/ProtoPNet/data/colon_bagged"

@@ -83,6 +83,13 @@ train_range, test_range = range(split_val), range(split_val, 100)
 #                                push=True, shuffle_bag=True)
 # ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
 
+# to create bags with only one nucleus type set nucleus_type to 'epithelial', 'inflammatory', 'fibroblast' or 'others'
+# as shown below
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='epithelial')
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='inflammatory')
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='fibroblast')
+# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='others')
+
 ds = MnistBags(train=True)
 ds_test = MnistBags(train=False)
 
