@@ -1,0 +1,20 @@
+seed: 323180171448800
+seed: 323290589327100
+seed: 323550387234600
+training set size: 140
+push set size: 140
+test set size: 30
+batch size: 1
+start training
+epoch: 	0
+	warm
+	train
+seed: 323704843206100
+training set size: 140
+push set size: 140
+test set size: 30
+batch size: 1
+start training
+epoch: 	0
+	warm
+	train
