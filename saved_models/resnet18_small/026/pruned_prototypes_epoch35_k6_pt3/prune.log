@@ -1,0 +1,153 @@
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	11.237079858779907
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	18.231875896453857
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: None
+push set size: 140
+	test
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	19.492834091186523
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	21.30635666847229
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	10.81078314781189
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	11.368073225021362
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	18.029157638549805
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	52.68838667869568
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+training set size: 140
+test set size: 30
+batch size: 1
+push set size: 140
+	test
+	time: 	35.61636662483215
+	total loss: 	0.021554979168567457
+	cross ent: 	0.016222705170890587
+	cluster: 	0.0025603699032217264
+	separation:	0.002771904094455143
+	avg separation:	3.2951285600662232
+	accu: 		96.66666666666667%
+	l1: 		30.943859100341797
+	p dist pair: 	7.784939765930176
+prune
+find nearest patches
+	find nearest patches time: 	106.55211663246155
+k = 6, prune_threshold = 3
+9 prototypes will be pruned
+	test
