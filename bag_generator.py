@@ -76,16 +76,19 @@ def bag_generator(train_set, test_set):
     tst = create_test_set(test_set)
     return trn, tst
 
-path = "/mnt/users/lpustelnik/local/ProtoPNet/data/bagged_mnist"
+path = "/mnt/users/lpustelnik/local/ProtoPNet/data/exp1"
 def create_images(test_set):
     test_set = create_test_set(test_set)
     test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1, shuffle=False,
                                               num_workers=4, pin_memory=False)
     idx=0
     for bag, label in test_loader:
-        save_image(bag, f"{path}/test/{label.item()}_{idx}.jpg")
-        idx+=1
-    
+        if label.item() == 0:
+            save_image(bag, f"{path}/{label.item()}_{idx}.jpg")
+            idx+=1
+            if idx == 6:
+                break
+        
 
 if __name__ == "__main__":
     transformation = transforms.Compose([

@@ -83,9 +83,9 @@ ppnet = model.construct_PPNet(base_architecture=base_architecture,
                               prototype_activation_function=prototype_activation_function,
                               add_on_layers_type=add_on_layers_type)
 
-ppnet.load_state_dict(torch.load(load_model_path))
+# ppnet.load_state_dict(torch.load(load_model_path))
 
-# ppnet = torch.load(load_model_path)
+ppnet = torch.load(load_model_path)
 ppnet = ppnet.cuda()
 ppnet_multi = torch.nn.DataParallel(ppnet)
 
