@@ -1,170 +1,86 @@
-import os
-import shutil
-
-import torch
-import torch.utils.data
-# import torch.utils.data.distributed
-import torchvision.transforms as transforms
-from torchvision.transforms import Resize, Compose, Lambda
-import torchvision.datasets as datasets
-from torchvision.datasets import MNIST, CIFAR10
-from mnist_data_loader import MnistBags
-from plot_logs import plot_logs, plot_conf_matrix
-
 import argparse
-import re
+import datetime
+import os
+import platform
+from enum import Enum
 
-from helpers import makedir
+import torch.utils.data
+from torch.utils.tensorboard import SummaryWriter
+
 import model
 import push
-import prune
-import train_and_test as tnt
 import save
-from log import create_logger
-from preprocess import mean, std, preprocess_input_function
-from bag_generator import bag_generator
-from colon_dataset import ColonCancerBagsCross
+from datasets.colon_dataset import ColonCancerBagsCross
+from datasets.mnist_dataset import MnistBags
+from helpers import makedir
+from preprocess import preprocess_input_function
+from settings import base_architecture, prototype_shape, num_classes, \
+    prototype_activation_function, add_on_layers_type, joint_optimizer_lrs, joint_lr_step_size, \
+    last_layer_optimizer_lr, warm_optimizer_lrs, coefs, \
+    num_train_epochs, num_warm_epochs, push_start, push_epochs, num_last_layer_iterations, class_specific
+from train_and_test import warm_only, train, joint, test, last_only
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-gpuid', nargs=1, type=str, default='0')  # python3 main.py -gpuid=0,1,2,3
+# noinspection PyTypeChecker
+parser = argparse.ArgumentParser(prog='', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('-g', '--gpuid', type=int, default=0, help='CUDA device id to use')
+parser.add_argument('-d', '--dataset', type=str, default='colon_cancer', choices=['mnist', 'colon_cancer'],
+                    help='Select dataset')
 args = parser.parse_args()
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpuid[0]
-print(os.environ['CUDA_VISIBLE_DEVICES'], torch.cuda.is_available())
 
-# book keeping namings and code
-from settings import base_architecture, img_size, prototype_shape, num_classes, \
-    prototype_activation_function, add_on_layers_type, experiment_run
+os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpuid)
+print('CUDA available:', torch.cuda.is_available())
 
-base_architecture_type = re.match('^[a-z]*', base_architecture).group(0)
-if "small" in base_architecture:
-    base_architecture_type = "small_" + base_architecture_type
+if args.dataset == 'colon_cancer':
+    split_val = 70
+    train_range, test_range = range(split_val), range(split_val, 100)
 
-model_dir = './saved_models/' + base_architecture + '/' + experiment_run + '/'
-makedir(model_dir)
-makedir(model_dir + "logs/")
-makedir(model_dir + "logs/conf_matrix/")
-shutil.copy(src=os.path.join(os.getcwd(), __file__), dst=model_dir)
-shutil.copy(src=os.path.join(os.getcwd(), 'settings.py'), dst=model_dir)
-shutil.copy(src=os.path.join(os.getcwd(), base_architecture_type + '_features.py'), dst=model_dir)
-shutil.copy(src=os.path.join(os.getcwd(), 'model.py'), dst=model_dir)
-shutil.copy(src=os.path.join(os.getcwd(), 'train_and_test.py'), dst=model_dir)
+    ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
+                              shuffle_bag=True)
+    ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range,
+                                   test_idxs=test_range,
+                                   push=True, shuffle_bag=True)
+    ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range,
+                                   test_idxs=test_range)
+    img_size = 27
 
-log, logclose = create_logger(log_filename=os.path.join(model_dir, 'train.log'))
-img_dir = os.path.join(model_dir, 'img')
-makedir(img_dir)
-weight_matrix_filename = 'outputL_weights'
-prototype_img_filename_prefix = 'prototype-img'
-prototype_self_act_filename_prefix = 'prototype-self-act'
-proto_bound_boxes_filename_prefix = 'bb'
+    # to create bags with only one nucleus type set nucleus_type to 'epithelial', 'inflammatory', 'fibroblast' or 'others' as shown below
+    # ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='epithelial')
+    # ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='inflammatory')
+    # ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='fibroblast')
+    # ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='others')
 
+elif args.dataset == 'mnist':
+    ds = MnistBags(train=True)
+    ds_push = MnistBags(train=True)
+    ds_test = MnistBags(train=False)
+    img_size = 28
+else:
+    raise NotImplementedError()
 
-seed = torch.seed()
-torch.manual_seed(seed)
-log(f"seed: {seed}")
-
-
-# load the data
-from settings import train_dir, test_dir, train_push_dir, \
-    train_batch_size, test_batch_size, train_push_batch_size
-
-normalize = transforms.Normalize(mean=mean, std=std)
-
-# transformation = transforms.Compose([
-#     transforms.ToTensor(),
-#     Lambda(lambda x: x.repeat(3, 1, 1) )
-# ])
-
-split_val = 70
-train_range, test_range = range(split_val), range(split_val, 100)
-
-# ds = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
-#                           shuffle_bag=True)
-# ds_push = ColonCancerBagsCross(path="data/ColonCancer", train=True, train_val_idxs=train_range, test_idxs=test_range,
-#                                push=True, shuffle_bag=True)
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range)
-
-# to create bags with only one nucleus type set nucleus_type to 'epithelial', 'inflammatory', 'fibroblast' or 'others'
-# as shown below
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='epithelial')
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='inflammatory')
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='fibroblast')
-# ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False, train_val_idxs=train_range, test_idxs=test_range, nucleus_type='others')
-
-ds = MnistBags(train=True)
-ds_test = MnistBags(train=False)
-
-# all datasets
-# train set
-train_loader = torch.utils.data.DataLoader(
-    ds, batch_size=train_batch_size, shuffle=True,
-    # num_workers=4,
-     pin_memory=False)
-# push set
-train_push_loader = torch.utils.data.DataLoader(
-    ds, batch_size=train_push_batch_size, shuffle=False,
-    # num_workers=4, 
-    pin_memory=False)
-# test set
-test_loader = torch.utils.data.DataLoader(
-    ds_test, batch_size=test_batch_size, shuffle=False,
-    # num_workers=4, 
-    pin_memory=False)
-
-# we should look into distributed sampler more carefully at torch.utils.data.distributed.DistributedSampler(train_dataset)
-log('training set size: {0}'.format(len(train_loader.dataset)))
-log('push set size: {0}'.format(len(train_push_loader.dataset)))
-log('test set size: {0}'.format(len(test_loader.dataset)))
-log('batch size: {0}'.format(train_batch_size))
-
-# construct the model
 ppnet = model.construct_PPNet(base_architecture=base_architecture,
                               pretrained=False, img_size=img_size,
                               prototype_shape=prototype_shape,
                               num_classes=num_classes,
                               prototype_activation_function=prototype_activation_function,
                               add_on_layers_type=add_on_layers_type)
-# if prototype_activation_function == 'linear':
-#    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
 ppnet = ppnet.cuda()
-ppnet_multi = torch.nn.DataParallel(ppnet)
-class_specific = True
 
-# define optimizer
-from settings import joint_optimizer_lrs, joint_lr_step_size
-from copy import deepcopy
 joint_optimizer_specs = [
     {
         'params': ppnet.features.parameters(),
         'lr': joint_optimizer_lrs['features'],
         'weight_decay': 1e-3
     },
-     # bias are now also being regularized
     {
-         'params': ppnet.add_on_layers.parameters(),
-         'lr': joint_optimizer_lrs['add_on_layers'],
-         'weight_decay': 1e-3
+        'params': ppnet.add_on_layers.parameters(),
+        'lr': joint_optimizer_lrs['add_on_layers'],
+        'weight_decay': 1e-3
     },
     {
         'params': ppnet.prototype_vectors,
         'lr': joint_optimizer_lrs['prototype_vectors']
     }
-    # {
-    #     'params': ppnet.attention_V.parameters(),
-    #     'lr': joint_optimizer_lrs['attention']
-    # },
-    # {
-    #     'params': ppnet.attention_U.parameters(),
-    #     'lr': joint_optimizer_lrs['attention']
-    # },
-    # {
-    #     'params': ppnet.attention_weights.parameters(),
-    #     'lr': joint_optimizer_lrs['attention']
-    # }
 ]
-joint_optimizer = torch.optim.Adam(joint_optimizer_specs)
-joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1)
-
-from settings import warm_optimizer_lrs
 
 warm_optimizer_specs = [
     {
@@ -172,26 +88,11 @@ warm_optimizer_specs = [
         'lr': warm_optimizer_lrs['add_on_layers'],
         'weight_decay': 1e-3
     },
-    # {
-    #     'params': ppnet.attention_V.parameters(),
-    #     'lr': warm_optimizer_lrs['attention']
-    # },
-    # {
-    #     'params': ppnet.attention_U.parameters(),
-    #     'lr': warm_optimizer_lrs['attention']
-    # },
-    # {
-    #     'params': ppnet.attention_weights.parameters(),
-    #     'lr': warm_optimizer_lrs['attention']
-    # },
     {
         'params': ppnet.prototype_vectors,
         'lr': warm_optimizer_lrs['prototype_vectors']
     },
 ]
-warm_optimizer = torch.optim.Adam(warm_optimizer_specs)
-
-from settings import last_layer_optimizer_lr
 
 last_layer_optimizer_specs = [
     {
@@ -200,99 +101,120 @@ last_layer_optimizer_specs = [
     },
     {
         'params': ppnet.attention_V.parameters(),
-        # 'lr': joint_optimizer_lrs['attention']
         'lr': last_layer_optimizer_lr['attention']
     },
     {
         'params': ppnet.attention_U.parameters(),
-        # 'lr': joint_optimizer_lrs['attention']
         'lr': last_layer_optimizer_lr['attention']
     },
     {
         'params': ppnet.attention_weights.parameters(),
-        # 'lr': joint_optimizer_lrs['attention']
         'lr': last_layer_optimizer_lr['attention']
     }
 ]
+
+joint_optimizer = torch.optim.Adam(joint_optimizer_specs)
+joint_lr_scheduler = torch.optim.lr_scheduler.StepLR(joint_optimizer, step_size=joint_lr_step_size, gamma=0.1)
+warm_optimizer = torch.optim.Adam(warm_optimizer_specs)
 last_layer_optimizer = torch.optim.Adam(last_layer_optimizer_specs)
 
-# weighting of different training losses
-from settings import coefs
+# TODO: checkpoint logic
 
-# number of training epochs, number of warm epochs, push start epoch, push epochs
-from settings import num_train_epochs, num_warm_epochs, push_start, push_epochs
+experiment_run = '{}.{}.{}'.format(args.dataset, platform.node(), datetime.datetime.now().isoformat())
+
+model_dir = os.path.join('saved_models', experiment_run)
+makedir(model_dir)
+img_dir = os.path.join(model_dir, 'img')
+makedir(img_dir)
+
+log_writer = SummaryWriter(os.path.join('runs', experiment_run))
+
+weight_matrix_filename = 'outputL_weights'
+prototype_img_filename_prefix = 'prototype-img'
+prototype_self_act_filename_prefix = 'prototype-self-act'
+proto_bound_boxes_filename_prefix = 'bb'
+
+seed = torch.seed()
+torch.manual_seed(seed)
+
+log_writer.add_text('seed', str(seed))
+
+# all datasets
+# train set
+train_loader = torch.utils.data.DataLoader(
+    ds, batch_size=None, shuffle=True,
+    num_workers=8,
+    pin_memory=True)
+# push set
+train_push_loader = torch.utils.data.DataLoader(
+    ds_push, batch_size=None, shuffle=False,
+    num_workers=8,
+    pin_memory=True)
+# test set
+test_loader = torch.utils.data.DataLoader(
+    ds_test, batch_size=None, shuffle=False,
+    num_workers=8,
+    pin_memory=True)
+
+# noinspection PyTypeChecker
+log_writer.add_text('dataset_stats',
+                    'training set size: {}, push set size: {}, test set size: {}'.format(
+                        len(train_loader.dataset), len(train_push_loader.dataset), len(test_loader.dataset)))
+
+# if prototype_activation_function == 'linear':
+#    ppnet.set_last_layer_incorrect_connection(incorrect_strength=0)
+
 
 # train the model
-log('start training')
+print('Training started')
 ACCURACY = 0.9  # over this accuracy save model
-train_total_loss, train_acc = [], []
-train_cross_ent, train_cluster_cost, train_sep_cost = [], [], []
 
 test_total_loss, test_acc = [], []
-test_cross_ent, test_cluster_cost, test_sep_cost = [], [], []
 
-push_total_loss, push_acc = [], []
-push_cross_ent, push_cluster_cost, push_sep_cost = [], [], []
-import copy
-from sklearn.metrics import plot_confusion_matrix
+step = -1
+
+
+class TrainMode(Enum):
+    WARM = 'warm'
+    JOINT = 'joint'
+    PUSH = 'push'
+    LAST_ONLY = 'last_only'
+
+
+def write_mode(mode: TrainMode, log_writer: SummaryWriter, step: int):
+    log_writer.add_scalar('mode/warm', int(mode == TrainMode.WARM), global_step=step)
+    log_writer.add_scalar('mode/joint', int(mode == TrainMode.JOINT), global_step=step)
+    log_writer.add_scalar('mode/push', int(mode == TrainMode.PUSH), global_step=step)
+    log_writer.add_scalar('mode/last_only', int(mode == TrainMode.LAST_ONLY), global_step=step)
+
 
 for epoch in range(num_train_epochs):
-    log('epoch: \t{0}'.format(epoch))
+    step += 1
+    print('epoch: \t{0}'.format(epoch))
 
     if epoch < num_warm_epochs:
-        tnt.warm_only(model=ppnet_multi, log=log)
-        _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=warm_optimizer,
-                      class_specific=class_specific, coefs=coefs, log=log)
+        write_mode(TrainMode.WARM, log_writer, step)
+        warm_only(model=ppnet)
+        train(model=ppnet, dataloader=train_loader, optimizer=warm_optimizer,
+              class_specific=class_specific, coefs=coefs, log_writer=log_writer, step=step)
     else:
-        tnt.joint(model=ppnet_multi, log=log)
-        # joint_lr_scheduler.step() # Move after optimizer.step()
-        tmp = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=joint_optimizer,
-                        class_specific=class_specific, coefs=coefs, log=log)
+        write_mode(TrainMode.JOINT, log_writer, step)
+        joint(model=ppnet)
+        train(model=ppnet, dataloader=train_loader, optimizer=joint_optimizer,
+              class_specific=class_specific, coefs=coefs, log_writer=log_writer, step=step)
         joint_lr_scheduler.step()
-        # update logs
-        train_acc.append(tmp[0])
-        train_cross_ent.append(tmp[1])
-        train_cluster_cost.append(tmp[2])
-        train_sep_cost.append(tmp[3])
-        train_total_loss.append(tmp[1] + tmp[2] + tmp[3])
 
-    tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
-                   class_specific=class_specific, log=log)
-
-    
-    # update logs
-    accu = tmp[0]
-    test_acc.append(accu)
-    test_cross_ent.append(tmp[1])
-    test_cluster_cost.append(tmp[2])
-    test_sep_cost.append(tmp[3])
-    test_total_loss.append(tmp[1] + tmp[2] + tmp[3])
-
+    accu = test(model=ppnet, dataloader=test_loader,
+                class_specific=class_specific, log_writer=log_writer, step=step)
     save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'nopush', accu=accu,
-                                target_accu=ACCURACY, log=log)
-
-    with torch.no_grad():
-        TP, FP = 0, 0
-        FN, TN = 0, 0
-        for inputs, targets in test_loader:
-            inputs, targets = inputs.cuda(), targets.cuda()
-            outputs, _ = ppnet(inputs)
-            predicted = torch.argmax(outputs, dim=1)
-
-            TP += (predicted == targets == 1).sum().item()
-            FP += (predicted == 1 and predicted != targets).sum().item()
-            TN += (predicted == targets == 0).sum().item()
-            FN += (predicted == 0 and predicted != targets).sum().item()
-
-        plot_conf_matrix([[TP, FP], [FN, TN]], str(epoch),
-                         model_dir + "logs/conf_matrix/")
+                                target_accu=ACCURACY)
 
     if epoch >= push_start and epoch in push_epochs:
-        conv_total_loss, conv_acc = [], []
-        conv_cross_ent, conv_cluster_cost, conv_sep_cost = [], [], []
+        step += 1
+        write_mode(TrainMode.PUSH, log_writer, step)
         push.push_prototypes(
             train_push_loader,  # pytorch dataloader (must be unnormalized in [0,1])
-            prototype_network_parallel=ppnet_multi,  # pytorch network with prototype_vectors
+            prototype_network_parallel=ppnet,  # pytorch network with prototype_vectors
             class_specific=class_specific,
             preprocess_input_function=preprocess_input_function,  # normalize if needed
             prototype_layer_stride=1,
@@ -301,58 +223,24 @@ for epoch in range(num_train_epochs):
             prototype_img_filename_prefix=prototype_img_filename_prefix,
             prototype_self_act_filename_prefix=prototype_self_act_filename_prefix,
             proto_bound_boxes_filename_prefix=proto_bound_boxes_filename_prefix,
-            save_prototype_class_identity=True,
-            log=log)
-        tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
-                       class_specific=class_specific, log=log)
-        # update logs
-        accu = tmp[0]
-        push_acc.append(tmp[0])
-        push_cross_ent.append(tmp[1])
-        push_cluster_cost.append(tmp[2])
-        push_sep_cost.append(tmp[3])
-        push_total_loss.append(tmp[1] + tmp[2] + tmp[3])
+            save_prototype_class_identity=True)
+        accu = test(model=ppnet, dataloader=test_loader,
+                    class_specific=class_specific, log_writer=log_writer, step=step)
         save.save_model_w_condition(model=ppnet, model_dir=model_dir, model_name=str(epoch) + 'push', accu=accu,
-                                    target_accu=ACCURACY, log=log)
+                                    target_accu=ACCURACY)
 
         if prototype_activation_function != 'linear':
-            tnt.last_only(model=ppnet_multi, log=log)
-            for i in range(15):
-                log('iteration: \t{0}'.format(i))
-                _ = tnt.train(model=ppnet_multi, dataloader=train_loader, optimizer=last_layer_optimizer,
-                              class_specific=class_specific, coefs=coefs, log=log)
-                tmp = tnt.test(model=ppnet_multi, dataloader=test_loader,
-                               class_specific=class_specific, log=log)
-                accu = tmp[0]
-                conv_acc.append(accu)
-                conv_cross_ent.append(tmp[1])
-                conv_cluster_cost.append(tmp[2])
-                conv_sep_cost.append(tmp[3])
-                conv_total_loss.append(tmp[1] + tmp[2] + tmp[3])
-
+            last_only(model=ppnet)
+            for i in range(num_last_layer_iterations):
+                step += 1
+                write_mode(TrainMode.LAST_ONLY, log_writer, step)
+                print('iteration: \t{0}'.format(i))
+                _ = train(model=ppnet, dataloader=train_loader, optimizer=last_layer_optimizer,
+                          class_specific=class_specific, coefs=coefs, log_writer=log_writer, step=step)
+                accu = test(model=ppnet, dataloader=test_loader,
+                            class_specific=class_specific, log_writer=log_writer, step=step)
                 save.save_model_w_condition(model=ppnet, model_dir=model_dir,
                                             model_name=str(epoch) + '_' + str(i) + 'push', accu=accu,
-                                            target_accu=ACCURACY, log=log)
-                with torch.no_grad():
-                    TP, FP = 0, 0
-                    FN, TN = 0, 0
-                    for inputs, targets in test_loader:
-                        inputs, targets = inputs.cuda(), targets.cuda()
-                        outputs, _ = ppnet(inputs)
-                        predicted = torch.argmax(outputs, dim=1)
+                                            target_accu=ACCURACY)
 
-                        TP += (predicted == targets == 1).sum().item()
-                        FP += (predicted == 1 and predicted != targets).sum().item()
-                        TN += (predicted == targets == 0).sum().item()
-                        FN += (predicted == 0 and predicted != targets).sum().item()
-
-                    plot_conf_matrix([[TP, FP], [FN, TN]], str(epoch) + "_iter_" + str(i),
-                                     model_dir + "logs/conf_matrix/")
-
-            plot_logs(model_dir + "logs/conv_" + str(epoch) + "_", conv_acc, conv_total_loss, conv_cross_ent,
-                      conv_cluster_cost, conv_sep_cost)
-
-plot_logs(model_dir + "logs/train_", train_acc, train_total_loss, train_cross_ent, train_cluster_cost, train_sep_cost)
-plot_logs(model_dir + "logs/push_", push_acc, push_total_loss, push_cross_ent, push_cluster_cost, push_sep_cost)
-plot_logs(model_dir + "logs/test_", test_acc, test_total_loss, test_cross_ent, test_cluster_cost, test_sep_cost)
-logclose()
+log_writer.close()

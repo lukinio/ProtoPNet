@@ -1,19 +1,14 @@
 base_architecture = 'resnet18_small'
-img_size = 28
 prototype_shape = (20, 512, 2, 2)
 num_classes = 2
 prototype_activation_function = 'log'
 add_on_layers_type = 'regular'
-
-experiment_run = '131'
+class_specific = True
 
 data_path = 'data/'
 train_dir = data_path + 'train_cropped_augmented/'
 test_dir = data_path + 'bagged_mnist/test/'
 train_push_dir = data_path + 'train_cropped/'
-train_batch_size = 1
-test_batch_size = 1
-train_push_batch_size = 1
 
 joint_optimizer_lrs = {
     'features': 1e-3,
@@ -24,7 +19,6 @@ joint_lr_step_size = 5
 
 warm_optimizer_lrs = {
     'add_on_layers': 3e-3,
-    # 'attention': 3e-3,
     'prototype_vectors': 3e-3
 }
 
@@ -42,6 +36,7 @@ coefs = {
 
 num_train_epochs = 101
 num_warm_epochs = 10
+num_last_layer_iterations = 15
 
-push_start = 20
-push_epochs = [i for i in range(num_train_epochs) if i % 10 == 0]
+push_start = 15
+push_epochs = [i for i in range(num_train_epochs) if i % 15 == 0]

@@ -1,11 +1,9 @@
 """Collection of functions for data augmentation of PIL images"""
 import numpy as np
 import numpy.random as random
-
-from PIL import Image, ImageFilter
-
-from skimage import color
 import skimage
+from PIL import Image, ImageFilter
+from skimage import color
 
 
 class RandomVerticalFlip(object):

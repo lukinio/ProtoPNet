@@ -3,14 +3,12 @@
 import os
 import random
 
-import scipy.io
 import numpy as np
-
-from PIL import Image
-from skimage import io, color
+import scipy.io
 import torch
 import torch.utils.data as data_utils
 import torchvision.transforms as transforms
+from skimage import io, color
 
 import utils_augemntation
 
@@ -33,10 +31,10 @@ class ColonCancerBagsCross(data_utils.Dataset):
               utils_augemntation.RandomVerticalFlip(),
               transforms.RandomHorizontalFlip(),
               transforms.ToTensor()
-        ]
+              ]
         tst = [utils_augemntation.HistoNormalize(),
                transforms.ToTensor()
-        ]
+               ]
         if not push:
             norma = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
             tr.append(norma)
@@ -90,7 +88,7 @@ class ColonCancerBagsCross(data_utils.Dataset):
                 img = np.dstack((img, xs, ys))
 
             # crop nucleus_type cells
-            dir_nucleus_type = dir + '/' + img_name + '_' + self.nucleus_type +'.mat'
+            dir_nucleus_type = dir + '/' + img_name + '_' + self.nucleus_type + '.mat'
             with open(dir_nucleus_type, 'rb') as f:
                 mat_nucleus_type = scipy.io.loadmat(f)
 
@@ -163,10 +161,11 @@ class ColonCancerBagsCross(data_utils.Dataset):
         labels_list = []
         for dir in dir_list:
             # Get image name
-            img_name = dir.split('\\')[-1]
+
+            img_name = os.path.basename(dir)
 
             # bmp to pillow
-            img_dir = dir + '/' + img_name + '.bmp'
+            img_dir = os.path.join(dir, img_name + '.bmp')
             img = io.imread(img_dir)
             if img.shape[2] == 4:
                 img = color.rgba2rgb(img)
@@ -178,7 +177,7 @@ class ColonCancerBagsCross(data_utils.Dataset):
                 img = np.dstack((img, xs, ys))
 
             # crop malignant cells
-            dir_epithelial = dir + '/' + img_name + '_epithelial.mat'
+            dir_epithelial = os.path.join(dir, img_name + '_epithelial.mat')
             with open(dir_epithelial, 'rb') as f:
                 mat_epithelial = scipy.io.loadmat(f)
 
@@ -214,9 +213,9 @@ class ColonCancerBagsCross(data_utils.Dataset):
                 cropped_cells_epithelial.append(img[int(y_start):int(y_end), int(x_start):int(x_end)])
 
             # crop all other cells
-            dir_inflammatory = dir + '/' + img_name + '_inflammatory.mat'
-            dir_fibroblast = dir + '/' + img_name + '_fibroblast.mat'
-            dir_others = dir + '/' + img_name + '_others.mat'
+            dir_inflammatory = os.path.join(dir, img_name + '_inflammatory.mat')
+            dir_fibroblast = os.path.join(dir, img_name + '_fibroblast.mat')
+            dir_others = os.path.join(dir, img_name + '_others.mat')
 
             with open(dir_inflammatory, 'rb') as f:
                 mat_inflammatory = scipy.io.loadmat(f)
@@ -317,22 +316,4 @@ class ColonCancerBagsCross(data_utils.Dataset):
             bag = self.bag_list_test[index]
             label = max(self.labels_list_test[index])
 
-        return self.transform_and_data_augmentation(bag), torch.tensor(int(label), dtype=torch.long)
-
-# from torchvision.utils import save_image
-# path = "/mnt/users/lpustelnik/local/ProtoPNet/data/colon_bagged"
-# if "__main__":
-#     ds_test = ColonCancerBagsCross(path="data/ColonCancer", train=False,
-#                                    train_val_idxs=range(70),
-#                                    test_idxs=range(70, 100), push=True)
-#
-#     test_loader = torch.utils.data.DataLoader(ds_test, batch_size=1,
-#                                               shuffle=False, num_workers=4,
-#                                               pin_memory=False)
-#     idx=0
-#     for bag, label in test_loader:
-#         bag = bag.squeeze(0)
-#         for i, b in enumerate(bag):
-#             save_image(b, f"{path}/{label.item()}_{i}_{idx}.png")
-#         idx+=1
-#         break
+        return self.transform_and_data_augmentation(bag), torch.LongTensor([int(label)])

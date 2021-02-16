@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
 
-from resnet_features import resnet18_features, resnet34_features, resnet50_features, resnet101_features, resnet152_features
-from densenet_features import densenet121_features, densenet161_features, densenet169_features, densenet201_features
-from vgg_features import vgg11_features, vgg11_bn_features, vgg13_features, vgg13_bn_features, vgg16_features, vgg16_bn_features,\
+from base_models.resnet_features import resnet18_features, resnet34_features, resnet50_features, resnet101_features, \
+    resnet152_features
+from base_models.densenet_features import densenet121_features, densenet161_features, densenet169_features, \
+    densenet201_features
+from base_models.vgg_features import vgg11_features, vgg11_bn_features, vgg13_features, vgg13_bn_features, \
+    vgg16_features, vgg16_bn_features, \
     vgg19_features, vgg19_bn_features
-from small_resnet_features import small_resnet18_features, small_resnet18_bottleneck_features
+from base_models.small_resnet_features import small_resnet18_features, small_resnet18_bottleneck_features
 
 from receptive_field import compute_proto_layer_rf_info_v2
 
@@ -56,7 +58,7 @@ class PPNet(nn.Module):
         Without domain specific knowledge we allocate the same number of
         prototypes for each class
         '''
-        assert(self.num_prototypes % self.num_classes == 0)
+        assert (self.num_prototypes % self.num_classes == 0)
         # a onehot indication matrix for each prototype's class identity
         self.prototype_class_identity = torch.zeros(self.num_prototypes,
                                                     self.num_classes)
@@ -98,7 +100,7 @@ class PPNet(nn.Module):
                 if current_out_channels > self.prototype_shape[1]:
                     add_on_layers.append(nn.ReLU())
                 else:
-                    assert(current_out_channels == self.prototype_shape[1])
+                    assert (current_out_channels == self.prototype_shape[1])
                     add_on_layers.append(nn.Sigmoid())
                 current_in_channels = current_in_channels // 2
             self.add_on_layers = nn.Sequential(*add_on_layers)
@@ -119,7 +121,6 @@ class PPNet(nn.Module):
         self.D = prototype_shape[0] // 2
         self.K = 1
 
-
         self.attention_V = nn.Sequential(
             nn.Linear(self.L, self.D),
             nn.Tanh()
@@ -132,13 +133,12 @@ class PPNet(nn.Module):
 
         self.attention_weights = nn.Linear(self.D, self.K)
 
-
         # do not make this just a tensor,
         # since it will not be moved automatically to gpu
         self.ones = nn.Parameter(torch.ones(self.prototype_shape),
                                  requires_grad=False)
 
-        self.last_layer = nn.Linear(self.num_prototypes , self.num_classes,
+        self.last_layer = nn.Linear(self.num_prototypes, self.num_classes,
                                     bias=False)  # do not use bias
 
         if init_weights:
@@ -211,11 +211,13 @@ class PPNet(nn.Module):
             return torch.log((distances + 1) / (distances + self.epsilon))
         elif self.prototype_activation_function == 'linear':
             return -distances
-        else:
+        elif callable(self.prototype_activation_function):
             return self.prototype_activation_function(distances)
+        else:
+            raise NotImplementedError()
 
     def forward(self, x):
-        x = x.squeeze(0)
+        # x = x.squeeze(0)
         distances = self.prototype_distances(x)
         '''
         we cannot refactor the lines below for similarity scores
@@ -227,7 +229,7 @@ class PPNet(nn.Module):
                                                    distances.size()[3]))
         min_distances = min_distances.view(-1, self.num_prototypes)
         prototype_activations = self.distance_2_similarity(min_distances)
-        
+
         # x = x.squeeze(0)
 
         # H = self.feature_extractor_part1(x)
@@ -235,16 +237,14 @@ class PPNet(nn.Module):
         # H = self.feature_extractor_part2(H)  # NxL
         A_V = self.attention_V(prototype_activations)  # NxD
         A_U = self.attention_U(prototype_activations)  # NxD
-        A = self.attention_weights(A_V * A_U) # element wise multiplication # NxK
+        A = self.attention_weights(A_V * A_U)  # element wise multiplication # NxK
         A = torch.transpose(A, 1, 0)  # KxN
         A = F.softmax(A, dim=1)  # softmax over N
 
         M = torch.mm(A, prototype_activations)  # KxL
 
-
         # Y_prob = self.classifier(M)
         # Y_hat = torch.ge(Y_prob, 0.5).float()
-
 
         # logits = self.last_layer(prototype_activations)
         logits = self.last_layer(M)
@@ -278,7 +278,7 @@ class PPNet(nn.Module):
         self.last_layer.in_features = self.num_prototypes
         self.last_layer.out_features = self.num_classes
         self.last_layer.weight.data = self.last_layer.weight.data[:,
-                                                                  prototypes_to_keep]
+                                      prototypes_to_keep]
 
         # self.ones is nn.Parameter
         self.ones = nn.Parameter(self.ones.data[prototypes_to_keep, ...],
@@ -336,6 +336,12 @@ class PPNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
         self.set_last_layer_incorrect_connection(incorrect_strength=-0.5)
+        nn.init.constant_(self.attention_weights.weight, 1)
+        nn.init.constant_(self.attention_weights.bias, 0)
+        nn.init.constant_(self.attention_U[0].weight, 1)
+        nn.init.constant_(self.attention_U[0].bias, 0)
+        nn.init.constant_(self.attention_V[0].weight, 1)
+        nn.init.constant_(self.attention_V[0].bias, 0)
 
 
 def construct_PPNet(base_architecture, pretrained=True, img_size=224,

@@ -1,27 +1,30 @@
-import time
+import numpy as np
 import torch
-from focalloss import FocalLoss
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from torch.utils.tensorboard import SummaryWriter
 
-from helpers import list_of_distances, make_one_hot
+from focalloss import FocalLoss
+from helpers import list_of_distances
+
 
 def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l1_mask=True,
-                   coefs=None, log=print):
+                   coefs=None, log_writer: SummaryWriter = None, step: int = 0):
     '''
     model: the multi-gpu model
     dataloader:
     optimizer: if None, will be test evaluation
     '''
     is_train = optimizer is not None
-    start = time.time()
     n_examples = 0
     n_correct = 0
     n_batches = 0
-    total_loss = 0.
     total_cross_entropy = 0
     total_cluster_cost = 0
     # separation cost is meaningful only for class_specific
     total_separation_cost = 0
     total_avg_separation_cost = 0
+    total_loss = 0
+    conf_matrix = np.zeros((2, 2), dtype='int32')
 
     for i, (image, label) in enumerate(dataloader):
         input = image.cuda()
@@ -30,23 +33,18 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
         # torch.enable_grad() has no effect outside of no_grad()
         grad_req = torch.enable_grad() if is_train else torch.no_grad()
         with grad_req:
-            # nn.Module has implemented __call__() function
-            # so no need to call .forward
             output, min_distances = model(input)
 
-            # compute loss
-            # cross_entropy = torch.nn.functional.cross_entropy(output, target, weight=torch.tensor([0.1, 0.9]).cuda())
-            # cross_entropy = torch.nn.functional.cross_entropy(output, target)
             cross_entropy = FocalLoss(alpha=0.5, gamma=2)(output, target)
 
             if class_specific:
-                max_dist = (model.module.prototype_shape[1]
-                            * model.module.prototype_shape[2]
-                            * model.module.prototype_shape[3])
+                max_dist = (model.prototype_shape[1]
+                            * model.prototype_shape[2]
+                            * model.prototype_shape[3])
 
                 # prototypes_of_correct_class is a tensor of shape batch_size * num_prototypes
                 # calculate cluster cost
-                prototypes_of_correct_class = torch.t(model.module.prototype_class_identity[:,label]).cuda()
+                prototypes_of_correct_class = torch.t(model.prototype_class_identity[:, label]).cuda()
                 inverted_distances, _ = torch.max((max_dist - min_distances) * prototypes_of_correct_class, dim=1)
                 cluster_cost = torch.mean(max_dist - inverted_distances)
 
@@ -58,24 +56,27 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
 
                 # calculate avg cluster cost
                 avg_separation_cost = \
-                    torch.sum(min_distances * prototypes_of_wrong_class, dim=1) / torch.sum(prototypes_of_wrong_class, dim=1)
+                    torch.sum(min_distances * prototypes_of_wrong_class, dim=1) / torch.sum(prototypes_of_wrong_class,
+                                                                                            dim=1)
                 avg_separation_cost = torch.mean(avg_separation_cost)
-                
+
                 if use_l1_mask:
-                    l1_mask = 1 - torch.t(model.module.prototype_class_identity).cuda()
-                    l1 = (model.module.last_layer.weight * l1_mask).norm(p=1)
+                    l1_mask = 1 - torch.t(model.prototype_class_identity).cuda()
+                    l1 = (model.last_layer.weight * l1_mask).norm(p=1)
                 else:
-                    l1 = model.module.last_layer.weight.norm(p=1) 
+                    l1 = model.last_layer.weight.norm(p=1)
 
             else:
                 min_distance, _ = torch.min(min_distances, dim=1)
                 cluster_cost = torch.mean(min_distance)
-                l1 = model.module.last_layer.weight.norm(p=1)
+                l1 = model.last_layer.weight.norm(p=1)
 
             # evaluation statistics
             _, predicted = torch.max(output.data, 1)
             n_examples += target.size(0)
             n_correct += (predicted == target).sum().item()
+
+            conf_matrix += confusion_matrix(target.cpu().numpy(), predicted.cpu().numpy(), labels=[0, 1])
 
             n_batches += 1
             total_cross_entropy += cross_entropy.item()
@@ -99,6 +100,7 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
                         + coefs['l1'] * l1)
             else:
                 loss = cross_entropy + 0.8 * cluster_cost + 1e-4 * l1
+        total_loss += loss.item()
         if is_train:
             optimizer.zero_grad()
             loss.backward()
@@ -114,83 +116,103 @@ def _train_or_test(model, dataloader, optimizer=None, class_specific=True, use_l
     total_cross_entropy /= n_batches
     total_cluster_cost /= n_batches
     total_separation_cost /= n_batches
-    total_loss = total_cross_entropy + total_cluster_cost + total_separation_cost
-    end = time.time()
+    total_loss /= n_batches
 
-    log('\ttime: \t{0}'.format(end -  start))
-    log('\ttotal loss: \t{0}'.format(total_loss))
-    log('\tcross ent: \t{0}'.format(total_cross_entropy))
-    log('\tcluster: \t{0}'.format(total_cluster_cost))
-    if class_specific:
-        log('\tseparation:\t{0}'.format(total_separation_cost))
-        log('\tavg separation:\t{0}'.format(total_avg_separation_cost / n_batches))
-    log('\taccu: \t\t{0}%'.format(n_correct / n_examples * 100))
-    log('\tl1: \t\t{0}'.format(model.module.last_layer.weight.norm(p=1).item()))
-    p = model.module.prototype_vectors.view(model.module.num_prototypes, -1).cpu()
+    print('accuracy:', n_correct / n_examples)
+    print('total_loss:', total_loss)
+
+    suffix = '/train' if is_train else '/test'
+    if log_writer:
+
+        log_writer.add_scalar('total_loss' + suffix, total_loss, global_step=step)
+        log_writer.add_scalar('cross_entropy' + suffix, total_cross_entropy, global_step=step)
+        log_writer.add_scalar('cluster_cost' + suffix, total_cluster_cost, global_step=step)
+
+        if class_specific:
+            log_writer.add_scalar('separation_cost' + suffix, total_separation_cost, global_step=step)
+            log_writer.add_scalar('avg_separation_cost' + suffix, total_avg_separation_cost / n_batches,
+                                  global_step=step)
+
+        log_writer.add_scalar('accuracy' + suffix, n_correct / n_examples, global_step=step)
+        log_writer.add_scalar('l1' + suffix, model.last_layer.weight.norm(p=1).item(), global_step=step)
+        conf_plot = ConfusionMatrixDisplay(confusion_matrix=conf_matrix).plot(cmap='Blues', values_format='d')
+        log_writer.add_figure('confusion_matrix' + suffix, conf_plot.figure_, global_step=step, close=True)
+
+    p = model.prototype_vectors.view(model.num_prototypes, -1).cpu()
     with torch.no_grad():
         p_avg_pair_dist = torch.mean(list_of_distances(p, p))
-    log('\tp dist pair: \t{0}'.format(p_avg_pair_dist.item()))
-    
-    return n_correct / n_examples, total_cross_entropy, total_cluster_cost, total_separation_cost
+
+    if log_writer:
+        log_writer.add_scalar('p_avg_pair_dist' + suffix, p_avg_pair_dist, global_step=step)
+
+    return n_correct / n_examples
 
 
-def train(model, dataloader, optimizer, class_specific=False, coefs=None, log=print):
-    assert(optimizer is not None)
-    
-    log('\ttrain')
+def train(model, dataloader, optimizer, class_specific=False, coefs=None, log_writer: SummaryWriter = None,
+          step: int = 0):
+    assert (optimizer is not None)
+
+    print('\ttrain')
     model.train()
     return _train_or_test(model=model, dataloader=dataloader, optimizer=optimizer,
-                          class_specific=class_specific, coefs=coefs, log=log)
+                          class_specific=class_specific, coefs=coefs, log_writer=log_writer, step=step)
 
 
-def test(model, dataloader, class_specific=False, log=print):
-    log('\ttest')
+def test(model, dataloader, class_specific=False, log_writer: SummaryWriter = None, step: int = 0):
+    print('\ttest')
     model.eval()
     return _train_or_test(model=model, dataloader=dataloader, optimizer=None,
-                          class_specific=class_specific, log=log)
+                          class_specific=class_specific, log_writer=log_writer, step=step)
 
 
-def last_only(model, log=print):
-    for p in model.module.features.parameters():
+def _freeze_layer(layer):
+    for p in layer.parameters():
         p.requires_grad = False
-    for p in model.module.add_on_layers.parameters():
-        p.requires_grad = False
-    model.module.prototype_vectors.requires_grad = False
-    # freeze attention layers
-    model.module.attention_V.requires_grad = False
-    model.module.attention_U.requires_grad = False
-    model.module.attention_weights.requires_grad = False
-    for p in model.module.last_layer.parameters():
-        p.requires_grad = True
-    
-    log('\tlast layer')
 
 
-def warm_only(model, log=print):
-    for p in model.module.features.parameters():
-        p.requires_grad = False
-    for p in model.module.add_on_layers.parameters():
+def _unfreeze_layer(layer):
+    for p in layer.parameters():
         p.requires_grad = True
-    model.module.prototype_vectors.requires_grad = True
-    model.module.attention_V.requires_grad = True
-    model.module.attention_U.requires_grad = True
-    model.module.attention_weights.requires_grad = True
-    for p in model.module.last_layer.parameters():
-        p.requires_grad = True
-    
-    log('\twarm')
 
 
-def joint(model, log=print):
-    for p in model.module.features.parameters():
-        p.requires_grad = True
-    for p in model.module.add_on_layers.parameters():
-        p.requires_grad = True
-    model.module.prototype_vectors.requires_grad = True
-    model.module.attention_V.requires_grad = True
-    model.module.attention_U.requires_grad = True
-    model.module.attention_weights.requires_grad = True
-    for p in model.module.last_layer.parameters():
-        p.requires_grad = True
-    
-    log('\tjoint')
+def last_only(model):
+    _freeze_layer(model.features)
+    _freeze_layer(model.add_on_layers)
+
+    model.prototype_vectors.requires_grad = False
+
+    _unfreeze_layer(model.attention_V)
+    _unfreeze_layer(model.attention_U)
+    _unfreeze_layer(model.attention_weights)
+    _unfreeze_layer(model.last_layer)
+
+    print('\tlast layer')
+
+
+def warm_only(model):
+    _freeze_layer(model.features)
+    _unfreeze_layer(model.add_on_layers)
+
+    _freeze_layer(model.attention_V)
+    _freeze_layer(model.attention_U)
+    _freeze_layer(model.attention_weights)
+
+    model.prototype_vectors.requires_grad = True
+
+    _unfreeze_layer(model.last_layer)
+
+    print('\twarm')
+
+
+def joint(model):
+    _unfreeze_layer(model.features)
+    _unfreeze_layer(model.add_on_layers)
+
+    model.prototype_vectors.requires_grad = True
+
+    _freeze_layer(model.attention_V)
+    _freeze_layer(model.attention_U)
+    _freeze_layer(model.attention_weights)
+    _freeze_layer(model.last_layer)
+
+    print('\tjoint')

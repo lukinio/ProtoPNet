@@ -1,5 +1,6 @@
-
-data/*
+saved_models/
+data/
+runs/
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,pycharm+all,jupyternotebooks,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,pycharm+all,jupyternotebooks,visualstudiocode
